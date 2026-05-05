@@ -66,6 +66,7 @@ db.exec(`
     roster_published           INTEGER NOT NULL DEFAULT 0,
     notes                      TEXT,
     notified_open              INTEGER NOT NULL DEFAULT 0,
+    notified_deadline_24h      INTEGER NOT NULL DEFAULT 0,
     venue                      TEXT,
     results_recorded           INTEGER NOT NULL DEFAULT 0,
     created_at                 TEXT NOT NULL DEFAULT (datetime('now')),
@@ -135,6 +136,7 @@ function ensureColumn(table, column, ddl) {
 ensureColumn('users', 'avatar', `avatar TEXT NOT NULL DEFAULT '🥒'`);
 ensureColumn('users', 'availability', `availability TEXT`);
 ensureColumn('users', 'onboarded_at', `onboarded_at TEXT`);
+ensureColumn('pickle_sessions', 'notified_deadline_24h', `notified_deadline_24h INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('pickle_sessions', 'venue', `venue TEXT`);
 ensureColumn('pickle_sessions', 'results_recorded', `results_recorded INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('roster_entries', 'is_reserve', `is_reserve INTEGER NOT NULL DEFAULT 0`);
@@ -1160,6 +1162,35 @@ async function runCronTasks() {
     WHERE status='open' AND datetime(response_deadline) < datetime('now', 'localtime')
   `).run();
   if (closed.changes > 0) console.log(`[cron] Auto-closed ${closed.changes} session(s)`);
+
+  // 1b. Deadline-approaching reminder: 24h before deadline, ping non-responders
+  const deadlineSoon = db.prepare(`
+    SELECT id, title, session_datetime, response_deadline
+    FROM pickle_sessions
+    WHERE status='open'
+      AND notified_deadline_24h = 0
+      AND datetime(response_deadline) <= datetime('now', 'localtime', '+24 hours')
+      AND datetime(response_deadline) > datetime('now', 'localtime')
+  `).all();
+
+  for (const s of deadlineSoon) {
+    db.prepare(`UPDATE pickle_sessions SET notified_deadline_24h=1 WHERE id=?`).run(s.id);
+    const nonResponders = db.prepare(`
+      SELECT u.id FROM users u
+      WHERE u.push_sub IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM responses r WHERE r.session_id = ? AND r.user_id = u.id)
+    `).all(s.id);
+    const label = s.title ? `${s.title} — ` : '';
+    for (const u of nonResponders) {
+      await sendPushToUser(u.id, {
+        title: 'McPICKLES ⏳ — 1 day left',
+        body: `${label}${formatSessionTime(s.session_datetime)} — last chance to say if you're in!`,
+        url: '/dashboard.html',
+        tag: 'deadline-24h'
+      });
+    }
+    if (nonResponders.length) console.log(`[cron] Deadline-24h reminder sent to ${nonResponders.length} for session ${s.id}`);
+  }
 
   // 2. 24-hour reminders
   const remind24 = db.prepare(`

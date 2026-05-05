@@ -607,6 +607,70 @@
     }
     .save-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--black); }
 
+    /* Wizard */
+    .wizard-dots {
+      display: flex;
+      gap: 0.4rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+    .wizard-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #ddd;
+      transition: all 0.2s;
+    }
+    .wizard-dot.active { background: var(--pickle-dark); transform: scale(1.3); }
+    .wizard-dot.done   { background: var(--pickle-light); }
+    .wizard-step h3 {
+      color: var(--pickle-dark);
+      margin-bottom: 0.5rem;
+    }
+    .wizard-step p {
+      color: #555;
+      margin-bottom: 1rem;
+    }
+    .wizard-actions {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 1rem;
+    }
+    .wizard-actions button {
+      flex: 1;
+      padding: 0.7rem;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1rem;
+      letter-spacing: 1px;
+      border: 2px solid var(--black);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .wiz-skip   { background: transparent; color: var(--pickle-dark); }
+    .wiz-next   { background: var(--pickle-dark); color: var(--cream); box-shadow: 2px 2px 0 var(--black); }
+    .wiz-action { background: var(--pickle-yellow); color: var(--black); box-shadow: 2px 2px 0 var(--black); }
+
+    .ios-install-steps {
+      background: #f0ede8;
+      border: 2px solid var(--pickle-mid);
+      border-radius: 6px;
+      padding: 0.85rem;
+      margin: 0.75rem 0;
+    }
+    .ios-install-steps ol { margin: 0; padding-left: 1.4rem; font-size: 0.88rem; line-height: 1.6; }
+    .ios-install-steps li { margin-bottom: 0.3rem; }
+    .ios-install-steps .icon-tile {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px; height: 24px;
+      background: #fff;
+      border: 1.5px solid var(--black);
+      border-radius: 4px;
+      vertical-align: -6px;
+      margin: 0 0.15rem;
+      font-size: 0.95rem;
+    }
+
     /* Availability grid */
     .avail-grid {
       display: grid;
@@ -821,17 +885,11 @@
     </div>
   </nav>
 
-  <!-- Onboarding modal (first-time users) -->
-  <div class="modal-overlay" id="onboarding-modal">
+  <!-- Welcome wizard (first-time users) -->
+  <div class="modal-overlay" id="wizard-modal">
     <div class="modal" style="max-width:440px;">
-      <h3 style="color:var(--pickle-dark);">👋 Welcome to McPICKLES!</h3>
-      <p>Quick setup before you dive in. Tap the slots when you're <em>usually</em> free — Darren uses this to pick fairer rosters. You can change this later in your profile.</p>
-      <div id="onboarding-grid"></div>
-      <div style="font-size:0.8rem;color:#666;margin:0.75rem 0 1rem;">Don't worry — this is just a guide, you'll still respond to each session individually.</div>
-      <div class="modal-btns">
-        <button class="btn-cancel" id="onboarding-skip">Skip for now</button>
-        <button class="btn-confirm" id="onboarding-save" style="background:var(--pickle-dark);color:var(--cream);">Save &amp; Get Started</button>
-      </div>
+      <div class="wizard-dots" id="wizard-dots"></div>
+      <div id="wizard-step"></div>
     </div>
   </div>
 
@@ -1319,9 +1377,10 @@
         </div>
 
         <div style="margin-top:1.25rem;padding:1.25rem;background:rgba(0,0,0,0.15);border-radius:8px;">
-          <div style="font-family:'Bebas Neue',sans-serif;letter-spacing:1px;color:var(--pickle-light);margin-bottom:0.5rem;">🔔 Notifications</div>
-          <div style="font-size:0.82rem;color:var(--pickle-light);margin-bottom:0.75rem;">Get push notifications when sessions drop and the day before you play.</div>
-          <button class="save-btn" id="push-test-btn" style="background:var(--pickle-mid);font-size:0.95rem;">Send a test notification</button>
+          <div style="font-family:'Bebas Neue',sans-serif;letter-spacing:1px;color:var(--pickle-light);margin-bottom:0.5rem;">📲 App setup</div>
+          <div style="font-size:0.82rem;color:var(--pickle-light);margin-bottom:0.75rem;">Need a refresher on installing the app or turning on notifications? Re-open the welcome guide here.</div>
+          <button class="save-btn" onclick="showWizard(true)" style="background:var(--pickle-mid);font-size:0.95rem;margin-bottom:0.75rem;">Show me the app guide</button>
+          <button class="save-btn" id="push-test-btn" style="background:var(--pickle-mid);font-size:0.95rem;">🔔 Send a test notification</button>
           <div id="push-msg" style="margin-top:0.5rem;text-align:center;font-size:0.78rem;color:var(--pickle-light);"></div>
         </div>
 
@@ -1389,29 +1448,234 @@
       }
     }
 
-    // ---- Onboarding ----
-    let onboardingAvailability = null;
-    function showOnboarding() {
-      onboardingAvailability = renderAvailGrid('onboarding-grid', currentUser.availability || emptyAvailability(), (data) => {
-        onboardingAvailability = data;
-      });
-      document.getElementById('onboarding-modal').classList.add('show');
+    // ---- Welcome Wizard ----
+    // Capture install prompt as early as possible
+    let deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+    });
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      if (wizardState.currentStep && wizardState.steps[wizardState.currentStep] === 'install') {
+        wizardNext();
+      }
+    });
+
+    function detectPlatform() {
+      const ua = navigator.userAgent;
+      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isAndroid = /Android/.test(ua);
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      const isMobile = isIOS || isAndroid;
+      return { isIOS, isAndroid, isStandalone, isMobile };
     }
 
-    async function finishOnboarding(saveAvail) {
-      const body = { onboarded: true };
-      if (saveAvail) body.availability = onboardingAvailability;
+    const wizardState = {
+      steps: [],
+      currentStep: 0,
+      availability: null,
+      isReplay: false   // true if user opens it manually from profile
+    };
+
+    function buildWizardSteps(replay = false) {
+      const { isIOS, isStandalone, isMobile } = detectPlatform();
+      const steps = ['welcome'];
+      // Show install step on mobile if not already installed
+      if (isMobile && !isStandalone) steps.push('install');
+      // Notifications: on iOS, only useful AFTER install; we still offer it (the OS will inform user)
+      if ('Notification' in window && Notification.permission === 'default') steps.push('notifications');
+      // Availability: only on first run, not replay
+      if (!replay) steps.push('availability');
+      steps.push('done');
+      return steps;
+    }
+
+    function showWizard(replay = false) {
+      wizardState.isReplay = replay;
+      wizardState.currentStep = 0;
+      wizardState.availability = currentUser.availability || emptyAvailability();
+      wizardState.steps = buildWizardSteps(replay);
+      // If only "welcome" + "done" remain (e.g. desktop, already installed, perms granted, replay), no point showing
+      if (replay && wizardState.steps.length <= 2) {
+        toast('You\'re already set up — nothing to do here! 🥒');
+        return;
+      }
+      document.getElementById('wizard-modal').classList.add('show');
+      renderWizardStep();
+    }
+
+    function renderWizardDots() {
+      const total = wizardState.steps.length;
+      let html = '';
+      for (let i = 0; i < total; i++) {
+        const cls = i === wizardState.currentStep ? 'active' : (i < wizardState.currentStep ? 'done' : '');
+        html += `<div class="wizard-dot ${cls}"></div>`;
+      }
+      document.getElementById('wizard-dots').innerHTML = html;
+    }
+
+    function renderWizardStep() {
+      renderWizardDots();
+      const stepName = wizardState.steps[wizardState.currentStep];
+      const el = document.getElementById('wizard-step');
+      const { isIOS, isAndroid } = detectPlatform();
+
+      if (stepName === 'welcome') {
+        const name = currentUser.display_name?.split(' ')[0] || 'player';
+        el.innerHTML = `<div class="wizard-step">
+          <h3>👋 Welcome, ${name}!</h3>
+          <p>McPICKLES is your hub for the squad's pickleball sessions — see when we're playing, say if you're in, and get the score. Let's get you set up in 30 seconds.</p>
+          <div class="wizard-actions">
+            <button class="wiz-next" onclick="wizardNext()">Let's go →</button>
+          </div>
+        </div>`;
+        return;
+      }
+
+      if (stepName === 'install') {
+        let body = '';
+        if (deferredInstallPrompt) {
+          body = `<p>Pop McPICKLES on your home screen so it opens like a real app — full-screen, no browser bar, and you can launch it with one tap.</p>
+            <div class="wizard-actions">
+              <button class="wiz-skip" onclick="wizardNext()">Skip</button>
+              <button class="wiz-action" onclick="installNow()">📲 Add to Home Screen</button>
+            </div>`;
+        } else if (isIOS) {
+          body = `<p>iPhone & iPad need a quick manual step to install:</p>
+            <div class="ios-install-steps">
+              <ol>
+                <li>Tap the <strong>Share</strong> button <span class="icon-tile">⬆️</span> at the bottom of Safari</li>
+                <li>Scroll down and tap <strong>Add to Home Screen</strong> <span class="icon-tile">➕</span></li>
+                <li>Tap <strong>Add</strong> in the top-right corner</li>
+                <li>Open McPICKLES from your home screen — that's the version that gets push notifications</li>
+              </ol>
+            </div>
+            <div style="font-size:0.8rem;color:#666;margin-top:0.5rem;">⚠️ Only Safari can add apps to your home screen. If you're in Chrome or another browser, copy the URL into Safari first.</div>
+            <div class="wizard-actions">
+              <button class="wiz-skip" onclick="wizardNext()">Maybe later</button>
+              <button class="wiz-next" onclick="wizardNext()">Done — next →</button>
+            </div>`;
+        } else if (isAndroid) {
+          body = `<p>Add McPICKLES to your home screen so it opens like a real app:</p>
+            <div class="ios-install-steps">
+              <ol>
+                <li>Tap the <strong>⋮ menu</strong> in the top-right of Chrome</li>
+                <li>Tap <strong>Add to Home screen</strong> or <strong>Install app</strong></li>
+                <li>Tap <strong>Install</strong></li>
+              </ol>
+            </div>
+            <div class="wizard-actions">
+              <button class="wiz-skip" onclick="wizardNext()">Maybe later</button>
+              <button class="wiz-next" onclick="wizardNext()">Done — next →</button>
+            </div>`;
+        } else {
+          // Shouldn't normally reach here, but fall through gracefully
+          body = `<p>You can install McPICKLES on your phone for the full experience.</p>
+            <div class="wizard-actions">
+              <button class="wiz-next" onclick="wizardNext()">Continue →</button>
+            </div>`;
+        }
+        el.innerHTML = `<div class="wizard-step"><h3>📲 Add to Home Screen</h3>${body}</div>`;
+        return;
+      }
+
+      if (stepName === 'notifications') {
+        const iosNote = isIOS ? `<div style="font-size:0.78rem;color:#888;margin-top:0.5rem;">On iPhone, notifications only work once McPICKLES is added to your home screen — make sure you did the previous step first.</div>` : '';
+        el.innerHTML = `<div class="wizard-step">
+          <h3>🔔 Stay in the loop</h3>
+          <p>Get a push when sessions go live, when you're picked, and a reminder the day before you play. We'll only ping you about pickleball — promise.</p>
+          ${iosNote}
+          <div class="wizard-actions">
+            <button class="wiz-skip" onclick="wizardNext()">Maybe later</button>
+            <button class="wiz-action" onclick="enableNotifsFromWizard()">🔔 Turn on notifications</button>
+          </div>
+        </div>`;
+        return;
+      }
+
+      if (stepName === 'availability') {
+        el.innerHTML = `<div class="wizard-step">
+          <h3>📅 When are you usually free?</h3>
+          <p>Tap the slots when you're <em>usually</em> around. Darren uses this to pick fairer rosters. You can change it any time in your profile.</p>
+          <div id="wizard-avail-grid"></div>
+          <div style="font-size:0.78rem;color:#666;margin-top:0.5rem;">You'll still respond to each session individually — this is just a guide.</div>
+          <div class="wizard-actions">
+            <button class="wiz-skip" onclick="wizardNext()">Skip</button>
+            <button class="wiz-next" onclick="saveWizardAvail()">Save →</button>
+          </div>
+        </div>`;
+        wizardState.availability = renderAvailGrid('wizard-avail-grid', wizardState.availability, (data) => {
+          wizardState.availability = data;
+        });
+        return;
+      }
+
+      if (stepName === 'done') {
+        el.innerHTML = `<div class="wizard-step" style="text-align:center;">
+          <h3>🥒 You're all set!</h3>
+          <p>Have a look around — your sessions, your stats, and the squad league. If you ever need this guide again, you'll find it on your profile.</p>
+          <div class="wizard-actions">
+            <button class="wiz-next" onclick="closeWizard()" style="flex:1;">Let's play! →</button>
+          </div>
+        </div>`;
+        // Mark onboarded on reaching the done step (fire and forget)
+        if (!currentUser.onboarded_at && !wizardState.isReplay) {
+          api(`/api/users/${currentUser.id}`, { method: 'PATCH', body: JSON.stringify({ onboarded: true }) }).catch(() => {});
+          currentUser.onboarded_at = new Date().toISOString();
+        }
+        return;
+      }
+    }
+
+    function wizardNext() {
+      if (wizardState.currentStep < wizardState.steps.length - 1) {
+        wizardState.currentStep++;
+        renderWizardStep();
+      } else {
+        closeWizard();
+      }
+    }
+
+    function closeWizard() {
+      document.getElementById('wizard-modal').classList.remove('show');
+    }
+
+    async function installNow() {
+      if (!deferredInstallPrompt) { wizardNext(); return; }
       try {
-        await api(`/api/users/${currentUser.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-        currentUser.onboarded_at = new Date().toISOString();
-        if (saveAvail) currentUser.availability = onboardingAvailability;
-        document.getElementById('onboarding-modal').classList.remove('show');
-        toast('Welcome aboard! 🥒');
-      } catch (e) { toast(e.message, true); }
+        await deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice;
+        deferredInstallPrompt = null;
+        if (choice.outcome === 'accepted') {
+          toast('Nice — McPICKLES is on your home screen 🥒');
+        }
+      } catch {}
+      wizardNext();
     }
 
-    document.getElementById('onboarding-skip').addEventListener('click', () => finishOnboarding(false));
-    document.getElementById('onboarding-save').addEventListener('click', () => finishOnboarding(true));
+    async function enableNotifsFromWizard() {
+      try {
+        const result = await Notification.requestPermission();
+        if (result === 'granted') {
+          await subscribePush();
+          toast('Notifications on! 🔔');
+        }
+      } catch {}
+      wizardNext();
+    }
+
+    async function saveWizardAvail() {
+      try {
+        await api(`/api/users/${currentUser.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ availability: wizardState.availability, onboarded: true })
+        });
+        currentUser.availability = wizardState.availability;
+        currentUser.onboarded_at = new Date().toISOString();
+      } catch (e) { toast(e.message, true); }
+      wizardNext();
+    }
 
     // ---- Push notifications ----
     function urlBase64ToUint8Array(base64String) {
@@ -1492,9 +1756,9 @@
 
       await Promise.all([loadSessions(), loadFact(), setupPush()]);
 
-      // First-time onboarding
+      // First-time onboarding wizard
       if (!currentUser.onboarded_at) {
-        showOnboarding();
+        showWizard(false);
       }
     }
 
