@@ -257,18 +257,18 @@ function formatSessionTime(dt) {
 
 // --- Achievements ---
 const ACHIEVEMENT_CATALOG = {
-  first_match:   { emoji: '🥒', name: 'First Pickle',     desc: 'Played your first match' },
-  ten_matches:   { emoji: '🏓', name: 'Regular',          desc: 'Played 10 matches' },
-  fifty_matches: { emoji: '🏆', name: 'Dedicated',        desc: 'Played 50 matches' },
-  first_win:     { emoji: '🥇', name: 'First Win',        desc: 'Won your first match' },
-  win_streak_3:  { emoji: '🔥', name: 'Hat-Trick',        desc: 'Won 3 matches in a row' },
-  win_streak_5:  { emoji: '⚡', name: 'On Fire',          desc: 'Won 5 matches in a row' },
-  always_keen:   { emoji: '😤', name: 'Always Keen',      desc: 'Said yes 5 times running' },
-  super_keen:    { emoji: '🔥', name: 'Super Keen',       desc: 'Picked "Extremely Keen" 5 times' },
-  reliable:      { emoji: '⭐', name: 'Reliable',         desc: 'Responded to 10 sessions' },
-  early_bird:    { emoji: '🐦', name: 'Early Bird',       desc: 'First to respond 3 times' },
-  reserve_hero:  { emoji: '🦸', name: 'Reserve Hero',     desc: 'Promoted from reserve to playing' },
-  perfect_score: { emoji: '💯', name: 'Perfect Score',    desc: 'Won a match 11-0' }
+  welcome_aboard: { emoji: '🎉', name: 'Welcome Aboard',  desc: 'Joined the squad' },
+  first_match:    { emoji: '🥒', name: 'First Pickle',    desc: 'Played your first match' },
+  ten_matches:    { emoji: '🏓', name: 'Regular',         desc: 'Played 10 matches' },
+  first_win:      { emoji: '🥇', name: 'First Win',       desc: 'Won your first match' },
+  win_streak_3:   { emoji: '🔥', name: 'Hat-Trick',       desc: 'Won 3 matches in a row' },
+  win_streak_5:   { emoji: '⚡', name: 'On Fire',         desc: 'Won 5 matches in a row' },
+  always_keen:    { emoji: '😤', name: 'Always Keen',     desc: 'Said yes 5 times running' },
+  super_keen:     { emoji: '🔥', name: 'Super Keen',      desc: 'Picked "Extremely Keen" 5 times' },
+  reliable:       { emoji: '⭐', name: 'Reliable',        desc: 'Responded to 10 sessions' },
+  early_bird:     { emoji: '🐦', name: 'Early Bird',      desc: 'First to respond 3 times' },
+  reserve_hero:   { emoji: '🦸', name: 'Reserve Hero',    desc: 'Promoted from reserve to playing' },
+  perfect_score:  { emoji: '💯', name: 'Perfect Score',   desc: 'Won a match 11-0' }
 };
 
 function award(userId, code) {
@@ -336,7 +336,6 @@ function checkAchievementsAfterMatch(userIds) {
     const stats = getPlayerStats(uid);
     if (stats.matches_played >= 1) award(uid, 'first_match');
     if (stats.matches_played >= 10) award(uid, 'ten_matches');
-    if (stats.matches_played >= 50) award(uid, 'fifty_matches');
     if (stats.wins >= 1) award(uid, 'first_win');
 
     // Win streaks
@@ -449,6 +448,8 @@ app.post('/api/auth/user-login', (req, res) => {
 
   const token = createAuthSession(user.id, false);
   res.cookie('session_token', token, cookieOpts(false));
+  // Welcome achievement (idempotent, only fires the first time)
+  award(user.id, 'welcome_aboard');
   res.json({
     ok: true,
     user: {
