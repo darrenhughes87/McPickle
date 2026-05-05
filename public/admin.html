@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>McPICKLES — Admin</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@300;400;600&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#2D5038">
+  <style>
+    :root {
+      --pickle-dark:   #2D5038;
+      --pickle-mid:    #4A7C59;
+      --pickle-light:  #8DB87B;
+      --black:         #1A1A1A;
+      --cream:         #F5F0E8;
+      --red:           #C0392B;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      font-family: 'Oswald', sans-serif;
+      background-color: var(--pickle-dark);
+      color: var(--cream);
+    }
+    body {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .checker-bar {
+      width: 100%;
+      height: 18px;
+      background-image: repeating-conic-gradient(var(--black) 0% 25%, var(--pickle-mid) 0% 50%);
+      background-size: 18px 18px;
+      flex-shrink: 0;
+    }
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2.5rem 1.5rem 1.5rem;
+      gap: 0.4rem;
+    }
+    .logo-icon {
+      width: 80px; height: 80px;
+      border-radius: 18px;
+      border: 3px solid var(--black);
+      box-shadow: 3px 3px 0 var(--black);
+    }
+    .logo-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 2.8rem;
+      letter-spacing: 3px;
+      text-shadow: 2px 2px 0 var(--black);
+    }
+    .mc-prefix {
+      font-family: 'Oswald', sans-serif;
+      font-weight: 700;
+      font-size: 0.9em;
+      letter-spacing: 0;
+      margin-right: 0.04em;
+    }
+    .logo-sub {
+      font-size: 0.8rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--pickle-light);
+    }
+    .card {
+      background: var(--cream);
+      color: var(--black);
+      border: 3px solid var(--black);
+      box-shadow: 5px 5px 0 var(--black);
+      border-radius: 8px;
+      padding: 2rem 1.75rem;
+      width: 100%;
+      max-width: 360px;
+      margin: 0 1rem;
+    }
+    .card h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.6rem;
+      letter-spacing: 2px;
+      color: var(--pickle-dark);
+      margin-bottom: 0.2rem;
+    }
+    .card p { font-size: 0.85rem; font-weight: 300; color: #666; margin-bottom: 1.5rem; }
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--pickle-dark);
+      margin-bottom: 0.4rem;
+    }
+    input[type="password"] {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      font-family: 'Oswald', sans-serif;
+      font-size: 1rem;
+      border: 2.5px solid var(--black);
+      border-radius: 4px;
+      background: #fff;
+      color: var(--black);
+      outline: none;
+    }
+    input[type="password"]:focus { border-color: var(--pickle-mid); }
+    .btn {
+      display: block; width: 100%; margin-top: 1.25rem;
+      padding: 0.85rem;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.4rem;
+      letter-spacing: 2px;
+      color: var(--cream);
+      background: var(--pickle-dark);
+      border: 2.5px solid var(--black);
+      border-radius: 4px;
+      box-shadow: 3px 3px 0 var(--black);
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    .btn:active { transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--black); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error-msg {
+      margin-top: 0.75rem; padding: 0.6rem 0.8rem;
+      background: #ffeaea; border: 2px solid var(--red);
+      border-radius: 4px; font-size: 0.85rem; color: var(--red);
+      display: none;
+    }
+    .error-msg.show { display: block; }
+    .back-link { margin-top: 1.5rem; font-size: 0.8rem; color: var(--pickle-light); }
+    .back-link a { color: var(--pickle-light); text-decoration: underline; }
+    .footer-checker {
+      margin-top: auto; width: 100%; height: 18px;
+      background-image: repeating-conic-gradient(var(--black) 0% 25%, var(--pickle-mid) 0% 50%);
+      background-size: 18px 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="checker-bar"></div>
+  <div class="hero">
+    <img src="/icon.svg" alt="McPICKLES" class="logo-icon">
+    <div class="logo-title"><span class="mc-prefix">Mc</span>PICKLES</div>
+    <div class="logo-sub">Admin Access</div>
+  </div>
+
+  <div class="card">
+    <h2>Admin Login</h2>
+    <p>Enter the admin password to manage sessions and the squad.</p>
+    <label for="password">Password</label>
+    <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+    <button class="btn" id="login-btn">Sign In</button>
+    <div class="error-msg" id="error-msg"></div>
+  </div>
+
+  <div class="back-link"><a href="/">← Back to player login</a></div>
+  <div class="footer-checker"></div>
+
+  <script>
+    fetch('/api/auth/me').then(r => {
+      if (r.ok) return r.json().then(d => {
+        if (d.admin) window.location.replace('/admin-dash.html');
+      });
+    }).catch(() => {});
+
+    const pwInput = document.getElementById('password');
+    const loginBtn = document.getElementById('login-btn');
+    const errorMsg = document.getElementById('error-msg');
+
+    loginBtn.addEventListener('click', doLogin);
+    pwInput.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+    async function doLogin() {
+      const password = pwInput.value;
+      if (!password) { errorMsg.textContent = 'Password required'; errorMsg.classList.add('show'); return; }
+      errorMsg.classList.remove('show');
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Signing in...';
+      try {
+        const res = await fetch('/api/auth/admin-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+        if (!res.ok) { errorMsg.textContent = data.error || 'Invalid password'; errorMsg.classList.add('show'); return; }
+        window.location.replace('/admin-dash.html');
+      } catch {
+        errorMsg.textContent = 'Network error — try again';
+        errorMsg.classList.add('show');
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Sign In';
+      }
+    }
+  </script>
+</body>
+</html>

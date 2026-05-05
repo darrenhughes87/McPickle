@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>McPICKLES — Admin</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#2D5038">
+  <style>
+    :root {
+      --pickle-dark:   #2D5038;
+      --pickle-mid:    #4A7C59;
+      --pickle-light:  #8DB87B;
+      --pickle-yellow: #D4B44A;
+      --black:         #1A1A1A;
+      --cream:         #F5F0E8;
+      --red:           #C0392B;
+      --amber:         #D4881A;
+      --blue:          #2563EB;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      min-height: 100dvh;
+      font-family: 'Oswald', sans-serif;
+      background: #1A1A1A;
+      color: var(--cream);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    .checker-bar {
+      width: 100%; height: 18px;
+      background-image: repeating-conic-gradient(var(--black) 0% 25%, var(--pickle-mid) 0% 50%);
+      background-size: 18px 18px;
+      flex-shrink: 0;
+    }
+    header {
+      background: var(--pickle-dark);
+      border-bottom: 3px solid var(--black);
+      padding: 0.8rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    header img { width: 38px; height: 38px; border-radius: 8px; border: 2px solid var(--black); }
+    .header-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; letter-spacing: 2px; }
+    .mc-prefix {
+      font-family: 'Oswald', sans-serif;
+      font-weight: 700;
+      font-size: 0.9em;
+      letter-spacing: 0;
+      margin-right: 0.04em;
+    }
+    .header-badge {
+      background: var(--pickle-yellow); color: var(--black);
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+      padding: 0.15rem 0.4rem; border-radius: 3px; border: 1.5px solid var(--black);
+    }
+    .logout-btn {
+      margin-left: auto;
+      padding: 0.4rem 0.8rem;
+      font-family: 'Oswald', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      background: transparent;
+      color: var(--pickle-light);
+      border: 1.5px solid var(--pickle-mid);
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .logout-btn:hover { background: var(--pickle-mid); color: var(--cream); }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      background: var(--black);
+      border-bottom: 3px solid var(--pickle-dark);
+      position: sticky;
+      top: 64px;
+      z-index: 15;
+    }
+    .tab {
+      flex: 1;
+      padding: 0.8rem;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.1rem;
+      letter-spacing: 2px;
+      text-align: center;
+      cursor: pointer;
+      color: #777;
+      border-bottom: 3px solid transparent;
+      transition: all 0.15s;
+    }
+    .tab.active { color: var(--pickle-light); border-bottom-color: var(--pickle-light); }
+
+    /* Layout */
+    main { flex: 1; padding: 1.25rem; max-width: 760px; width: 100%; margin: 0 auto; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Section headers */
+    .section-head {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.4rem;
+      letter-spacing: 2px;
+      color: var(--pickle-light);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .section-head::after { content: ''; flex: 1; height: 2px; background: #333; }
+
+    /* Cards */
+    .card {
+      background: #2a2a2a;
+      border: 2px solid #3a3a3a;
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .card-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.1rem;
+      letter-spacing: 1px;
+      color: var(--pickle-light);
+      margin-bottom: 1rem;
+    }
+
+    /* Form controls */
+    .form-row { margin-bottom: 0.9rem; }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.9rem; }
+    .date-time-row { display: flex; gap: 0.4rem; }
+    .date-time-row input[type="date"] { flex: 1.6; }
+    .date-time-row input[type="time"] { flex: 1; }
+    label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #aaa;
+      margin-bottom: 0.3rem;
+    }
+    input[type="text"], input[type="number"], input[type="datetime-local"], input[type="date"], input[type="time"], textarea, select {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      font-family: 'Oswald', sans-serif;
+      font-size: 0.95rem;
+      background: #1a1a1a;
+      color: var(--cream);
+      border: 2px solid #444;
+      border-radius: 4px;
+      outline: none;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--pickle-mid); }
+    textarea { resize: vertical; min-height: 60px; }
+
+    .hint { font-size: 0.72rem; color: #666; margin-top: 0.2rem; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.55rem 1rem;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1rem;
+      letter-spacing: 1.5px;
+      border: 2px solid var(--black);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.1s;
+      text-decoration: none;
+    }
+    .btn:active { transform: translate(1px,1px); }
+    .btn-primary  { background: var(--pickle-dark); color: var(--cream); border-color: var(--pickle-mid); box-shadow: 2px 2px 0 var(--pickle-dark); }
+    .btn-green    { background: #2E7D32; color: var(--cream); border-color: #1a5c1e; box-shadow: 2px 2px 0 #1a5c1e; }
+    .btn-yellow   { background: var(--pickle-yellow); color: var(--black); border-color: #a07800; box-shadow: 2px 2px 0 #a07800; }
+    .btn-red      { background: var(--red); color: var(--cream); border-color: #8b2520; box-shadow: 2px 2px 0 #8b2520; }
+    .btn-blue     { background: var(--blue); color: var(--cream); border-color: #1d4ed8; box-shadow: 2px 2px 0 #1d4ed8; }
+    .btn-ghost    { background: transparent; color: #aaa; border-color: #555; }
+    .btn-ghost:hover { color: var(--cream); border-color: #888; }
+    .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.85rem; letter-spacing: 1px; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    /* Session list card */
+    .session-admin-card {
+      background: #252525;
+      border: 2px solid #3a3a3a;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+    .sac-header {
+      padding: 0.9rem 1.1rem;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+      border-bottom: 1px solid #333;
+    }
+    .sac-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; letter-spacing: 1px; line-height: 1; }
+    .sac-datetime { font-size: 0.8rem; color: #999; margin-top: 0.2rem; }
+    .sac-deadline { font-size: 0.72rem; color: #666; margin-top: 0.1rem; }
+    .sac-venue { font-size: 0.72rem; color: var(--pickle-light); margin-top: 0.1rem; }
+    .status-pill {
+      display: inline-block;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .pill-draft     { background: #444; color: #bbb; }
+    .pill-open      { background: #1a5c1e; color: #7ecf83; }
+    .pill-closed    { background: #444; color: #bbb; }
+    .pill-cancelled { background: #5c1a1a; color: #cf7e7e; }
+    .pill-published { background: #4a3d10; color: var(--pickle-yellow); margin-left: 0.3rem; }
+
+    .sac-stats {
+      padding: 0.6rem 1.1rem;
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      font-size: 0.78rem;
+      color: #888;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    .sac-stat strong { color: var(--pickle-light); }
+
+    .sac-actions {
+      padding: 0.75rem 1.1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    /* Responses panel */
+    .responses-panel {
+      display: none;
+      border-top: 1px solid #333;
+      padding: 1rem 1.1rem;
+      background: #1e1e1e;
+    }
+    .responses-panel.open { display: block; }
+
+    .resp-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      margin-bottom: 1rem;
+    }
+    .resp-table th {
+      text-align: left;
+      padding: 0.4rem 0.5rem;
+      font-size: 0.65rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: #666;
+      border-bottom: 1px solid #333;
+    }
+    .resp-table td { padding: 0.45rem 0.5rem; border-bottom: 1px solid #2a2a2a; vertical-align: middle; }
+    .resp-table tr:last-child td { border-bottom: none; }
+    .resp-available   { color: #7ecf83; font-weight: 600; }
+    .resp-unavailable { color: #cf7e7e; }
+    .resp-no-reply    { color: #666; font-style: italic; }
+    .priority-star    { color: var(--pickle-yellow); font-size: 0.75rem; margin-left: 0.25rem; }
+
+    .keen-badge {
+      display: inline-block;
+      padding: 0.15rem 0.4rem;
+      font-size: 0.65rem;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+    .keen-1 { background: #1a5c1e; color: #7ecf83; }
+    .keen-2 { background: #2d5c1a; color: #a0cf7e; }
+    .keen-3 { background: #5c4a1a; color: #cfb37e; }
+    .keen-4 { background: #3a3a3a; color: #aaa; }
+
+    /* Roster selection */
+    .roster-builder {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 0.9rem;
+      margin-bottom: 0.75rem;
+    }
+    .roster-builder-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1rem;
+      letter-spacing: 1px;
+      color: var(--pickle-yellow);
+      margin-bottom: 0.75rem;
+    }
+    .suggest-btns { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+
+    .player-checkboxes { display: flex; flex-direction: column; gap: 0.4rem; }
+    .player-checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.4rem 0.5rem;
+      background: #252525;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .player-checkbox-row.is-roster   { border-left: 3px solid #2E7D32; }
+    .player-checkbox-row.is-reserve  { border-left: 3px solid var(--amber); }
+    .player-checkbox-row input[type="checkbox"] {
+      width: 18px; height: 18px;
+      accent-color: var(--pickle-mid);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .player-checkbox-row label { font-size: 0.85rem; color: var(--cream); margin: 0; cursor: pointer; flex: 1; letter-spacing: 0; text-transform: none; font-weight: 400; }
+    .role-toggle {
+      background: #444;
+      color: #aaa;
+      border: 1px solid #555;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .role-toggle.is-roster   { background: #1a5c1e; color: #7ecf83; border-color: #2E7D32; }
+    .role-toggle.is-reserve  { background: #5c4a1a; color: #cfb37e; border-color: var(--amber); }
+
+    .roster-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; }
+
+    /* Cost info box */
+    .cost-info-box {
+      background: #1a1a1a;
+      border: 1px solid var(--pickle-dark);
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+    .cost-info-box strong { color: var(--pickle-yellow); }
+
+    /* Match results panel */
+    .results-panel {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 0.9rem;
+      margin-top: 0.5rem;
+    }
+    .match-row {
+      background: #252525;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 0.7rem;
+      margin-bottom: 0.5rem;
+    }
+    .match-team-row {
+      display: grid;
+      grid-template-columns: 1fr 60px 1fr;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.4rem;
+    }
+    .match-side { display: flex; flex-direction: column; gap: 0.3rem; }
+    .match-side select {
+      font-size: 0.8rem;
+      padding: 0.35rem 0.5rem;
+    }
+    .match-side .team-label { font-size: 0.65rem; color: #888; letter-spacing: 1px; text-transform: uppercase; }
+    .match-score-input {
+      text-align: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.4rem;
+      letter-spacing: 1px;
+    }
+    .match-vs { text-align: center; font-size: 0.7rem; color: #666; }
+    .match-remove {
+      background: transparent;
+      color: #888;
+      border: 1px solid #555;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.7rem;
+      border-radius: 3px;
+      cursor: pointer;
+      margin-top: 0.3rem;
+    }
+
+    /* User list */
+    .user-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 0.75rem;
+      background: #252525;
+      border: 1px solid #333;
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+    }
+    .user-avatar-mini {
+      width: 32px; height: 32px;
+      background: var(--pickle-mid);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+      border: 1.5px solid #444;
+    }
+    .user-row .user-name { font-weight: 600; flex: 1; }
+    .user-row .user-handle { font-size: 0.78rem; color: #777; font-family: monospace; }
+    .priority-toggle {
+      background: none;
+      border: 1.5px solid #444;
+      color: #666;
+      border-radius: 3px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.72rem;
+      cursor: pointer;
+      font-family: 'Oswald', sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .priority-toggle.active { border-color: var(--pickle-yellow); color: var(--pickle-yellow); background: rgba(212,180,74,0.1); }
+
+    /* Avatar picker (squad form) */
+    .avatar-picker-mini {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 0.3rem;
+      margin-top: 0.4rem;
+    }
+    .avatar-opt-mini {
+      background: #1a1a1a;
+      border: 1.5px solid #444;
+      border-radius: 4px;
+      padding: 0.3rem;
+      font-size: 1.1rem;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.1s;
+    }
+    .avatar-opt-mini:hover { background: #2a2a2a; }
+    .avatar-opt-mini.selected {
+      background: var(--pickle-yellow);
+      border-color: var(--pickle-yellow);
+      transform: scale(1.05);
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+      background: var(--pickle-dark); color: var(--cream);
+      border: 2px solid var(--pickle-mid);
+      border-radius: 6px; padding: 0.6rem 1.25rem;
+      font-size: 0.85rem; font-weight: 600;
+      opacity: 0; transition: opacity 0.3s;
+      pointer-events: none; z-index: 999; white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+    #toast.error { background: #5c1a1a; border-color: var(--red); }
+
+    /* Spinner */
+    .spinner { display: flex; justify-content: center; padding: 3rem; }
+    .spinner::after {
+      content: ''; width: 36px; height: 36px;
+      border: 4px solid #333; border-top-color: var(--pickle-light);
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Empty state */
+    .empty { text-align: center; padding: 2rem 1rem; color: #555; }
+    .empty .bi { font-size: 2.5rem; display: block; margin-bottom: 0.5rem; }
+    .empty p { font-size: 0.85rem; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.8); z-index: 100;
+      align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: #2a2a2a; color: var(--cream);
+      border: 2px solid #444; border-radius: 8px;
+      padding: 1.5rem; max-width: 380px; width: 100%;
+    }
+    .modal h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem; letter-spacing: 1px; margin-bottom: 0.5rem; }
+    .modal p { font-size: 0.85rem; color: #aaa; margin-bottom: 1.25rem; }
+    .modal .form-row { margin-bottom: 0.75rem; }
+    .modal-btns { display: flex; gap: 0.75rem; }
+    .modal-btns .btn { flex: 1; justify-content: center; }
+  </style>
+</head>
+<body>
+  <div class="checker-bar"></div>
+  <header>
+    <img src="/icon.svg" alt="McPICKLES">
+    <div class="header-title"><span class="mc-prefix">Mc</span>PICKLES</div>
+    <span class="header-badge">Admin</span>
+    <button class="logout-btn" onclick="doLogout()">Log out</button>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-sessions" onclick="switchTab('sessions')">📅 Sessions</div>
+    <div class="tab" id="tab-squad" onclick="switchTab('squad')">👥 Squad</div>
+    <div class="tab" id="tab-leaderboard" onclick="switchTab('leaderboard')">🏆 League</div>
+  </div>
+
+  <main>
+    <div class="tab-panel active" id="panel-sessions">
+      <div id="sessions-content"><div class="spinner"></div></div>
+    </div>
+
+    <div class="tab-panel" id="panel-squad">
+      <div id="squad-content"><div class="spinner"></div></div>
+    </div>
+
+    <div class="tab-panel" id="panel-leaderboard">
+      <div id="leaderboard-content"><div class="spinner"></div></div>
+    </div>
+  </main>
+
+  <!-- Edit session modal -->
+  <div class="modal-overlay" id="edit-modal">
+    <div class="modal">
+      <h3>Edit Session</h3>
+      <input type="hidden" id="edit-session-id">
+      <div class="form-row">
+        <label>Title (optional)</label>
+        <input type="text" id="edit-title" placeholder="e.g. Wednesday Evening">
+      </div>
+      <div class="form-row" style="margin-bottom:0.75rem;">
+        <label>Date &amp; Time</label>
+        <div class="date-time-row">
+          <input type="date" id="edit-date">
+          <input type="time" id="edit-time">
+        </div>
+      </div>
+      <div class="form-row" style="margin-bottom:0.75rem;">
+        <label>Response Deadline</label>
+        <div class="date-time-row">
+          <input type="date" id="edit-deadline-date">
+          <input type="time" id="edit-deadline-time">
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Venue (optional)</label>
+        <input type="text" id="edit-venue" placeholder="e.g. The Estate Courts">
+      </div>
+      <div class="form-row-2" style="margin-bottom:0.75rem;">
+        <div>
+          <label>Max Players</label>
+          <input type="number" id="edit-max-players" min="2" max="16">
+        </div>
+        <div>
+          <label>Courts</label>
+          <input type="number" id="edit-courts" min="1" max="6">
+        </div>
+      </div>
+      <div class="form-row-2" style="margin-bottom:0.75rem;">
+        <div>
+          <label>Court cost (p)</label>
+          <input type="number" id="edit-court-cost" min="0">
+        </div>
+        <div>
+          <label>Racket hire (p)</label>
+          <input type="number" id="edit-racket" min="0">
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Notes</label>
+        <textarea id="edit-notes" placeholder="Any extra info..."></textarea>
+      </div>
+      <div class="modal-btns">
+        <button class="btn btn-ghost" onclick="closeEditModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEdit()">Save changes</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    const AVATAR_CHOICES = ['🥒','🏓','🥎','🎾','🏆','🔥','⚡','💪','🎯','🦾','🦸','🥷','🧙','🧑','👩','👨','🧔','👴','👵','🐶','🐱','🐼','🦊','🐯','🦁','🐻','🐸','🦖'];
+
+    // ---- Utilities ----
+    function pence(p) { return `£${(p / 100).toFixed(2)}`; }
+    function fmt(dt) {
+      try { return new Date(dt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+      catch { return dt; }
+    }
+    function toLocalInput(dt) {
+      if (!dt) return '';
+      return dt.slice(0, 16);
+    }
+    function getCombinedDatetime(dateId, timeId) {
+      const d = document.getElementById(dateId).value;
+      const t = document.getElementById(timeId).value || '00:00';
+      if (!d) return '';
+      return `${d}T${t}:00`;
+    }
+    function setDatetimeSplit(dateId, timeId, dt) {
+      if (!dt) return;
+      document.getElementById(dateId).value = dt.slice(0, 10);
+      document.getElementById(timeId).value = dt.slice(11, 16);
+    }
+
+    let toastTimer;
+    function toast(msg, isError = false) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = isError ? 'show error' : 'show';
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { el.className = ''; }, 3000);
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    async function doLogout() {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.replace('/admin.html');
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById(`tab-${name}`).classList.add('active');
+      document.getElementById(`panel-${name}`).classList.add('active');
+      if (name === 'leaderboard') loadLeaderboard();
+    }
+
+    // ---- SESSIONS ----
+    let allSessions = [];
+    let allUsers = [];
+    let selectedAvatar = '🥒';
+
+    async function loadSessions() {
+      try {
+        allSessions = await api('/api/sessions');
+        renderSessionsTab();
+      } catch (e) {
+        document.getElementById('sessions-content').innerHTML = `<div class="empty"><p>Failed to load sessions: ${e.message}</p></div>`;
+      }
+    }
+
+    function calcDefaultDeadline(dt) {
+      const d = new Date(dt);
+      const jsDay = d.getDay();
+      const dayFromMonday = jsDay === 0 ? 6 : jsDay - 1;
+      const thisMonday = new Date(d); thisMonday.setDate(d.getDate() - dayFromMonday);
+      const prevFriday = new Date(thisMonday); prevFriday.setDate(thisMonday.getDate() - 3);
+      prevFriday.setHours(23, 59, 59, 0);
+      return prevFriday.toISOString().replace('Z', '').slice(0, 16);
+    }
+
+    function renderSessionsTab() {
+      const el = document.getElementById('sessions-content');
+      const draft = allSessions.filter(s => s.status === 'draft');
+      const open  = allSessions.filter(s => s.status === 'open');
+      const closed = allSessions.filter(s => s.status === 'closed');
+      const cancelled = allSessions.filter(s => s.status === 'cancelled');
+
+      let html = `
+        <div class="section-head">Create New Session</div>
+        <div class="card">
+          <div class="form-row-2">
+            <div>
+              <label>Date</label>
+              <input type="date" id="new-date" min="${new Date().toISOString().slice(0,10)}" onchange="updateNewDeadline()">
+            </div>
+            <div>
+              <label>Time</label>
+              <input type="time" id="new-time" value="18:30">
+            </div>
+          </div>
+          <div class="form-row-2">
+            <div>
+              <label>Deadline Date</label>
+              <input type="date" id="new-deadline-date">
+              <div class="hint">Auto-set to Friday before session week</div>
+            </div>
+            <div>
+              <label>Deadline Time</label>
+              <input type="time" id="new-deadline-time" value="23:59">
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Title (optional)</label>
+            <input type="text" id="new-title" placeholder="e.g. Wednesday Evening">
+          </div>
+          <div class="form-row">
+            <label>Venue (optional)</label>
+            <input type="text" id="new-venue" placeholder="e.g. The Estate Courts">
+          </div>
+          <div class="form-row-2">
+            <div>
+              <label>Max Players</label>
+              <input type="number" id="new-max-players" value="4" min="2" max="16">
+            </div>
+            <div>
+              <label>Courts</label>
+              <input type="number" id="new-courts" value="1" min="1" max="6">
+            </div>
+          </div>
+          <div class="form-row-2">
+            <div>
+              <label>Court cost (pence)</label>
+              <input type="number" id="new-court-cost" value="600" min="0">
+              <div class="hint">600 = £6.00 per court</div>
+            </div>
+            <div>
+              <label>Racket hire (pence)</label>
+              <input type="number" id="new-racket" value="250" min="0">
+              <div class="hint">250 = £2.50</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Notes</label>
+            <textarea id="new-notes" placeholder="Anything the squad should know..."></textarea>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="createSession(false)">💾 Save Draft</button>
+            <button class="btn btn-green" onclick="createSession(true)">📣 Create &amp; Publish</button>
+          </div>
+        </div>`;
+
+      const renderGroup = (label, sessions) => {
+        if (!sessions.length) return '';
+        return `<div class="section-head" style="margin-top:1.5rem;">${label}</div>` +
+          sessions.map(s => renderSessionCard(s)).join('');
+      };
+
+      html += renderGroup('Draft', draft);
+      html += renderGroup('Open — Awaiting Responses', open);
+      html += renderGroup('Closed — Pick Your Squad', closed);
+      if (cancelled.length) html += renderGroup('Cancelled', cancelled);
+
+      if (!draft.length && !open.length && !closed.length) {
+        html += `<div class="empty" style="margin-top:1rem;"><p>No sessions yet — create one above!</p></div>`;
+      }
+
+      el.innerHTML = html;
+    }
+
+    function renderSessionCard(s) {
+      const courtTotal = s.courts * s.court_cost_per_court_pence;
+      const pillClass = { draft: 'pill-draft', open: 'pill-open', closed: 'pill-closed', cancelled: 'pill-cancelled' }[s.status] || 'pill-draft';
+      const isPublished = s.roster_published === 1;
+
+      let actionsHtml = '';
+      if (s.status === 'draft') {
+        actionsHtml = `
+          <button class="btn btn-green btn-sm" onclick="publishSession(${s.id})">📣 Publish</button>
+          <button class="btn btn-ghost btn-sm" onclick="openEditModal(${s.id})">✏️ Edit</button>
+          <button class="btn btn-blue btn-sm" onclick="cloneSession(${s.id})">📋 Clone</button>
+          <button class="btn btn-red btn-sm" onclick="deleteSession(${s.id})">🗑 Delete</button>`;
+      } else if (s.status === 'open') {
+        actionsHtml = `
+          <button class="btn btn-yellow btn-sm" onclick="toggleResponses(${s.id})">👀 Responses (${s.total_responses})</button>
+          <button class="btn btn-ghost btn-sm" onclick="openEditModal(${s.id})">✏️ Edit</button>
+          <button class="btn btn-blue btn-sm" onclick="cloneSession(${s.id})">📋 Clone</button>
+          <button class="btn btn-red btn-sm" onclick="cancelSession(${s.id})">❌ Cancel</button>`;
+      } else if (s.status === 'closed') {
+        if (isPublished) {
+          actionsHtml = `
+            <button class="btn btn-yellow btn-sm" onclick="toggleResponses(${s.id})">👥 View Roster</button>
+            <button class="btn btn-blue btn-sm" onclick="cloneSession(${s.id})">📋 Clone for next week</button>
+            <button class="btn btn-green btn-sm" onclick="toggleResults(${s.id})">📊 Record Results</button>
+            <button class="btn btn-red btn-sm" onclick="cancelSession(${s.id})">❌ Cancel</button>`;
+        } else {
+          actionsHtml = `
+            <button class="btn btn-yellow btn-sm" onclick="toggleResponses(${s.id})">👥 Pick Squad (${s.available_count} avail)</button>
+            <button class="btn btn-blue btn-sm" onclick="cloneSession(${s.id})">📋 Clone</button>
+            <button class="btn btn-red btn-sm" onclick="cancelSession(${s.id})">❌ Cancel</button>`;
+        }
+      } else if (s.status === 'cancelled') {
+        actionsHtml = `<span style="font-size:0.78rem;color:#666;">Cancelled</span>`;
+      }
+
+      return `<div class="session-admin-card" id="sac-${s.id}">
+        <div class="sac-header">
+          <div>
+            <div class="sac-title">${s.title || fmt(s.session_datetime)}</div>
+            ${s.title ? `<div class="sac-datetime">${fmt(s.session_datetime)}</div>` : ''}
+            <div class="sac-deadline">Deadline: ${fmt(s.response_deadline)}</div>
+            ${s.venue ? `<div class="sac-venue">📍 ${s.venue}</div>` : ''}
+          </div>
+          <div>
+            <span class="status-pill ${pillClass}">${s.status}</span>
+            ${isPublished ? '<span class="status-pill pill-published">📣 published</span>' : ''}
+          </div>
+        </div>
+        <div class="sac-stats">
+          <span>⛳ ${s.courts} court${s.courts > 1 ? 's' : ''}</span>
+          <span>👥 ${s.available_count}/${s.max_players} keen</span>
+          <span>💰 ${pence(courtTotal)} total · ${pence(Math.ceil(courtTotal / s.max_players))}/person est.</span>
+          ${s.results_recorded ? '<span style="color:var(--pickle-yellow);">📊 results recorded</span>' : ''}
+        </div>
+        <div class="sac-actions">${actionsHtml}</div>
+        <div class="responses-panel" id="rp-${s.id}"></div>
+        <div class="responses-panel" id="results-${s.id}"></div>
+      </div>`;
+    }
+
+    function updateNewDeadline() {
+      const dt = getCombinedDatetime('new-date', 'new-time');
+      if (dt) {
+        const deadline = calcDefaultDeadline(dt);
+        document.getElementById('new-deadline-date').value = deadline.slice(0, 10);
+        document.getElementById('new-deadline-time').value = deadline.slice(11, 16);
+      }
+    }
+
+    async function createSession(andPublish) {
+      const dt = getCombinedDatetime('new-date', 'new-time');
+      if (!dt) { toast('Please set a date and time', true); return; }
+      const body = {
+        session_datetime: dt,
+        title: document.getElementById('new-title').value.trim() || null,
+        venue: document.getElementById('new-venue').value.trim() || null,
+        max_players: parseInt(document.getElementById('new-max-players').value) || 4,
+        courts: parseInt(document.getElementById('new-courts').value) || 1,
+        court_cost_per_court_pence: parseInt(document.getElementById('new-court-cost').value) || 600,
+        racket_hire_pence: parseInt(document.getElementById('new-racket').value) || 250,
+        response_deadline: getCombinedDatetime('new-deadline-date', 'new-deadline-time') || (calcDefaultDeadline(dt) + ':00'),
+        notes: document.getElementById('new-notes').value.trim() || null
+      };
+      try {
+        const session = await api('/api/sessions', { method: 'POST', body: JSON.stringify(body) });
+        if (andPublish) {
+          await api(`/api/sessions/${session.id}/publish`, { method: 'POST' });
+          toast('Session created and published! Push sent to squad 🥒');
+        } else {
+          toast('Draft saved');
+        }
+        loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function publishSession(id) {
+      if (!confirm('Publish this session? Push notifications will be sent to all squad members.')) return;
+      try {
+        await api(`/api/sessions/${id}/publish`, { method: 'POST' });
+        toast('Published! Push sent 🥒');
+        loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function cancelSession(id) {
+      if (!confirm('Cancel this session? Roster members will be notified if roster was published.')) return;
+      try {
+        await api(`/api/sessions/${id}/cancel`, { method: 'POST' });
+        toast('Session cancelled');
+        loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function deleteSession(id) {
+      if (!confirm('Delete this draft session?')) return;
+      try {
+        await api(`/api/sessions/${id}`, { method: 'DELETE' });
+        toast('Draft deleted');
+        loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function cloneSession(id) {
+      try {
+        const s = await api(`/api/sessions/${id}/clone`, { method: 'POST' });
+        toast(`Cloned to draft for ${fmt(s.session_datetime)}`);
+        loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    // ---- Response panel ----
+    let rosterState = {};   // sid → Set of {user_id, role: 'roster'|'reserve'}
+    let responsePanelData = {}; // sid → full payload
+
+    async function toggleResponses(sid) {
+      const panel = document.getElementById(`rp-${sid}`);
+      if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+        return;
+      }
+      // Close other panels
+      document.getElementById(`results-${sid}`).classList.remove('open');
+      panel.innerHTML = '<div class="spinner" style="padding:1.5rem;"></div>';
+      panel.classList.add('open');
+      try {
+        const data = await api(`/api/sessions/${sid}/responses`);
+        responsePanelData[sid] = data;
+        renderResponsePanel(sid, data);
+      } catch (e) {
+        panel.innerHTML = `<p style="color:var(--red);padding:1rem;">${e.message}</p>`;
+      }
+    }
+
+    function renderResponsePanel(sid, data) {
+      const panel = document.getElementById(`rp-${sid}`);
+      const { session, responses, non_responders, current_roster, current_reserves, suggestions, cost_info } = data;
+      const isPublished = session.roster_published === 1;
+
+      if (!rosterState[sid]) {
+        rosterState[sid] = {
+          roster: new Set(current_roster),
+          reserve: new Set(current_reserves || [])
+        };
+      }
+
+      const keenLabel = ['', '🔥 Extremely', '😊 Fairly', '👍 OK', '😐 Not Arsed'];
+      const availRows = responses.filter(r => r.available === 1);
+      const notAvailRows = responses.filter(r => r.available === 0);
+
+      let html = `<div class="cost-info-box">
+        💰 Court total: <strong>${pence(cost_info.court_total_pence)}</strong>
+        · Est. per person (${session.max_players} max): <strong>${pence(cost_info.cost_per_player_pence)}</strong>
+        · Racket hire: <strong>${pence(cost_info.racket_hire_pence)}</strong>
+      </div>`;
+
+      // Responses table
+      html += `<table class="resp-table">
+        <thead><tr><th>Player</th><th>Available</th><th>Keenness</th><th>Submitted</th></tr></thead><tbody>`;
+
+      availRows.forEach(r => {
+        html += `<tr>
+          <td>${r.avatar || '🥒'} ${r.display_name}${r.is_priority ? `<span class="priority-star">⭐</span>` : ''}</td>
+          <td class="resp-available">✅ Yes</td>
+          <td><span class="keen-badge keen-${r.keenness}">${keenLabel[r.keenness] || '—'}</span></td>
+          <td style="color:#666;font-size:0.72rem;">${fmt(r.submitted_at)}</td>
+        </tr>`;
+      });
+      notAvailRows.forEach(r => {
+        html += `<tr>
+          <td>${r.avatar || '🥒'} ${r.display_name}${r.is_priority ? `<span class="priority-star">⭐</span>` : ''}</td>
+          <td class="resp-unavailable">❌ Can't make it</td>
+          <td>—</td>
+          <td style="color:#666;font-size:0.72rem;">${fmt(r.submitted_at)}</td>
+        </tr>`;
+      });
+      non_responders.forEach(u => {
+        html += `<tr>
+          <td>${u.avatar || '🥒'} ${u.display_name}${u.is_priority ? `<span class="priority-star">⭐</span>` : ''}</td>
+          <td class="resp-no-reply">No reply</td><td>—</td><td>—</td>
+        </tr>`;
+      });
+
+      html += `</tbody></table>`;
+
+      if (!isPublished) {
+        html += `<div class="roster-builder">
+          <div class="roster-builder-title">⚽ Build Your Squad (${session.max_players} slots)</div>
+          <div class="suggest-btns">
+            <button class="btn btn-primary btn-sm" onclick="applySuggestion(${sid}, ${JSON.stringify(suggestions.by_keenness)})">💡 Suggest by Keenness</button>
+            <button class="btn btn-ghost btn-sm" onclick="applySuggestion(${sid}, ${JSON.stringify(suggestions.random)})">🎲 Random Pick</button>
+            <button class="btn btn-ghost btn-sm" onclick="clearRoster(${sid})">Clear all</button>
+          </div>
+          <div class="player-checkboxes" id="roster-checks-${sid}">`;
+
+        availRows.forEach(r => {
+          const role = rosterState[sid].roster.has(r.user_id) ? 'roster'
+                    : rosterState[sid].reserve.has(r.user_id) ? 'reserve' : 'none';
+          html += `<div class="player-checkbox-row is-${role}" id="prow-${sid}-${r.user_id}">
+            <span style="font-size:1.1rem;">${r.avatar || '🥒'}</span>
+            <label>${r.display_name}${r.is_priority ? ' ⭐' : ''} <span style="color:#666;font-size:0.72rem;">— ${keenLabel[r.keenness] || ''}</span></label>
+            <button class="role-toggle is-${role}" onclick="cycleRole(${sid}, ${r.user_id})">
+              ${role === 'roster' ? '✅ playing' : role === 'reserve' ? '🔁 reserve' : '— off'}
+            </button>
+          </div>`;
+        });
+
+        html += `</div>
+          <div style="font-size:0.72rem;color:#666;margin-top:0.6rem;">Tap the role button to cycle: off → playing → reserve → off. Reserve players get bumped up if someone drops out.</div>
+          <div class="roster-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveRoster(${sid})">💾 Save Roster</button>
+            <button class="btn btn-green btn-sm" onclick="publishRoster(${sid})">📣 Publish Roster to Squad</button>
+          </div>
+        </div>`;
+      } else {
+        // Published roster view
+        const rosterUserDetails = (responses.filter(r => current_roster.includes(r.user_id)));
+        const reserveUserDetails = (responses.filter(r => (current_reserves || []).includes(r.user_id)));
+
+        html += `<div style="background:#1a3a1e;border:1px solid #2E7D32;border-radius:6px;padding:0.75rem;margin-top:0.5rem;">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:1px;color:#7ecf83;margin-bottom:0.5rem;">🏆 Roster Published</div>
+          <div style="font-size:0.85rem;color:var(--cream);">${rosterUserDetails.map(p => `${p.avatar || '🥒'} ${p.display_name}`).join(' · ') || 'No players'}</div>
+          ${reserveUserDetails.length ? `<div style="font-size:0.78rem;color:var(--amber);margin-top:0.5rem;">🔁 Reserves: ${reserveUserDetails.map(p => `${p.avatar || '🥒'} ${p.display_name}`).join(' · ')}</div>` : ''}
+          <div style="font-size:0.7rem;color:#666;margin-top:0.5rem;">Push sent to all squad members. Drop-outs auto-promote the first reserve.</div>
+        </div>`;
+
+        if (reserveUserDetails.length) {
+          html += `<div class="roster-builder" style="margin-top:0.75rem;">
+            <div class="roster-builder-title">🦸 Promote a reserve</div>
+            <div style="font-size:0.78rem;color:#aaa;margin-bottom:0.5rem;">Use this if a confirmed player tells you they can't make it.</div>
+            ${reserveUserDetails.map(r => `
+              <div class="player-checkbox-row" style="border-left:3px solid var(--amber);">
+                <span style="font-size:1.1rem;">${r.avatar || '🥒'}</span>
+                <label>${r.display_name}</label>
+                <button class="btn btn-yellow btn-sm" onclick="promoteReserve(${sid}, ${r.user_id})">Promote</button>
+              </div>
+            `).join('')}
+          </div>`;
+        }
+      }
+
+      panel.innerHTML = html;
+    }
+
+    function cycleRole(sid, uid) {
+      if (!rosterState[sid]) rosterState[sid] = { roster: new Set(), reserve: new Set() };
+      const state = rosterState[sid];
+      if (state.roster.has(uid)) {
+        state.roster.delete(uid);
+        state.reserve.add(uid);
+      } else if (state.reserve.has(uid)) {
+        state.reserve.delete(uid);
+      } else {
+        state.roster.add(uid);
+      }
+      // Re-render this row
+      renderResponsePanel(sid, responsePanelData[sid]);
+    }
+
+    function applySuggestion(sid, userIds) {
+      rosterState[sid] = { roster: new Set(userIds), reserve: new Set() };
+      renderResponsePanel(sid, responsePanelData[sid]);
+      toast('Suggestion applied — review and save');
+    }
+
+    function clearRoster(sid) {
+      rosterState[sid] = { roster: new Set(), reserve: new Set() };
+      renderResponsePanel(sid, responsePanelData[sid]);
+    }
+
+    async function saveRoster(sid) {
+      const state = rosterState[sid] || { roster: new Set(), reserve: new Set() };
+      try {
+        await api(`/api/sessions/${sid}/roster`, {
+          method: 'POST',
+          body: JSON.stringify({ user_ids: [...state.roster], reserve_ids: [...state.reserve] })
+        });
+        toast('Roster saved');
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function publishRoster(sid) {
+      const state = rosterState[sid] || { roster: new Set() };
+      if (!state.roster.size) { toast('Pick at least one player first', true); return; }
+      try {
+        await api(`/api/sessions/${sid}/roster`, {
+          method: 'POST',
+          body: JSON.stringify({ user_ids: [...state.roster], reserve_ids: [...state.reserve] })
+        });
+        await api(`/api/sessions/${sid}/roster/publish`, { method: 'POST' });
+        toast('Roster published! Squad notified 🏆');
+        delete rosterState[sid];
+        loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function promoteReserve(sid, uid) {
+      try {
+        await api(`/api/sessions/${sid}/roster/promote`, { method: 'POST', body: JSON.stringify({ user_id: uid }) });
+        toast('Reserve promoted to roster — they\'ve been notified');
+        const data = await api(`/api/sessions/${sid}/responses`);
+        responsePanelData[sid] = data;
+        renderResponsePanel(sid, data);
+      } catch (e) { toast(e.message, true); }
+    }
+
+    // ---- Match Results ----
+    let matchesState = {}; // sid → array of { team_a_ids, team_b_ids, team_a_score, team_b_score }
+
+    async function toggleResults(sid) {
+      const panel = document.getElementById(`results-${sid}`);
+      if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+        return;
+      }
+      document.getElementById(`rp-${sid}`).classList.remove('open');
+      panel.innerHTML = '<div class="spinner" style="padding:1.5rem;"></div>';
+      panel.classList.add('open');
+
+      try {
+        const [responses, results] = await Promise.all([
+          api(`/api/sessions/${sid}/responses`),
+          api(`/api/sessions/${sid}/results`)
+        ]);
+        responsePanelData[sid] = responses;
+        const rosterIds = responses.current_roster;
+
+        if (!matchesState[sid]) {
+          if (results.length) {
+            matchesState[sid] = results.map(r => ({
+              team_a_ids: r.team_a_ids,
+              team_b_ids: r.team_b_ids,
+              team_a_score: r.team_a_score,
+              team_b_score: r.team_b_score
+            }));
+          } else {
+            matchesState[sid] = [];
+          }
+        }
+
+        renderResultsPanel(sid, rosterIds);
+      } catch (e) {
+        panel.innerHTML = `<p style="color:var(--red);padding:1rem;">${e.message}</p>`;
+      }
+    }
+
+    function renderResultsPanel(sid, rosterIds) {
+      const panel = document.getElementById(`results-${sid}`);
+      const data = responsePanelData[sid];
+      const playerOptions = data.responses.filter(r => rosterIds.includes(r.user_id));
+
+      let html = `<div class="results-panel">
+        <div class="roster-builder-title">📊 Record Match Results</div>
+        <div style="font-size:0.78rem;color:#aaa;margin-bottom:0.75rem;">Add each match played in this session. Stats and achievements update automatically when you save.</div>
+        <div id="matches-list-${sid}">`;
+
+      const playerOptionHtml = (selectedId) => {
+        return `<option value="">— select —</option>` +
+          playerOptions.map(p => `<option value="${p.user_id}" ${p.user_id === selectedId ? 'selected' : ''}>${p.avatar || '🥒'} ${p.display_name}</option>`).join('');
+      };
+
+      const matches = matchesState[sid] || [];
+      if (!matches.length) {
+        html += `<div style="font-size:0.78rem;color:#666;text-align:center;padding:0.75rem;">No matches yet — click "Add Match" to start</div>`;
+      } else {
+        matches.forEach((m, idx) => {
+          const teamSize = Math.max(m.team_a_ids.length, m.team_b_ids.length, 2);
+          html += `<div class="match-row">
+            <div class="team-label" style="font-size:0.65rem;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:0.4rem;">Match ${idx + 1}</div>
+            <div class="match-team-row">
+              <div class="match-side">
+                <div class="team-label">Team A</div>
+                ${[...Array(teamSize)].map((_, i) => `<select onchange="setMatchPlayer(${sid}, ${idx}, 'a', ${i}, this.value)">${playerOptionHtml(m.team_a_ids[i])}</select>`).join('')}
+                <input type="number" class="match-score-input" value="${m.team_a_score}" min="0" max="99"
+                  onchange="setMatchScore(${sid}, ${idx}, 'a', this.value)">
+              </div>
+              <div class="match-vs">VS</div>
+              <div class="match-side">
+                <div class="team-label">Team B</div>
+                ${[...Array(teamSize)].map((_, i) => `<select onchange="setMatchPlayer(${sid}, ${idx}, 'b', ${i}, this.value)">${playerOptionHtml(m.team_b_ids[i])}</select>`).join('')}
+                <input type="number" class="match-score-input" value="${m.team_b_score}" min="0" max="99"
+                  onchange="setMatchScore(${sid}, ${idx}, 'b', this.value)">
+              </div>
+            </div>
+            <button class="match-remove" onclick="removeMatch(${sid}, ${idx})">Remove match</button>
+          </div>`;
+        });
+      }
+
+      html += `</div>
+        <div class="roster-actions">
+          <button class="btn btn-ghost btn-sm" onclick="addMatch(${sid}, 1)">➕ Add Singles</button>
+          <button class="btn btn-ghost btn-sm" onclick="addMatch(${sid}, 2)">➕ Add Doubles</button>
+          <button class="btn btn-green btn-sm" onclick="saveMatchResults(${sid})">💾 Save Results</button>
+        </div>
+      </div>`;
+
+      panel.innerHTML = html;
+    }
+
+    function addMatch(sid, teamSize) {
+      if (!matchesState[sid]) matchesState[sid] = [];
+      matchesState[sid].push({
+        team_a_ids: Array(teamSize).fill(null),
+        team_b_ids: Array(teamSize).fill(null),
+        team_a_score: 0,
+        team_b_score: 0
+      });
+      const rosterIds = responsePanelData[sid].current_roster;
+      renderResultsPanel(sid, rosterIds);
+    }
+
+    function removeMatch(sid, idx) {
+      matchesState[sid].splice(idx, 1);
+      const rosterIds = responsePanelData[sid].current_roster;
+      renderResultsPanel(sid, rosterIds);
+    }
+
+    function setMatchPlayer(sid, idx, team, slot, val) {
+      const m = matchesState[sid][idx];
+      const arr = team === 'a' ? m.team_a_ids : m.team_b_ids;
+      arr[slot] = val ? parseInt(val) : null;
+    }
+
+    function setMatchScore(sid, idx, team, val) {
+      const m = matchesState[sid][idx];
+      const score = parseInt(val) || 0;
+      if (team === 'a') m.team_a_score = score;
+      else m.team_b_score = score;
+    }
+
+    async function saveMatchResults(sid) {
+      const matches = (matchesState[sid] || []).map(m => ({
+        team_a_ids: m.team_a_ids.filter(x => x),
+        team_b_ids: m.team_b_ids.filter(x => x),
+        team_a_score: m.team_a_score,
+        team_b_score: m.team_b_score
+      })).filter(m => m.team_a_ids.length && m.team_b_ids.length);
+
+      try {
+        await api(`/api/sessions/${sid}/results`, { method: 'POST', body: JSON.stringify({ matches }) });
+        toast(`Saved ${matches.length} match${matches.length === 1 ? '' : 'es'} — stats updated 🏆`);
+        loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    // ---- Edit modal ----
+    function openEditModal(sid) {
+      const s = allSessions.find(x => x.id === sid);
+      if (!s) return;
+      document.getElementById('edit-session-id').value = sid;
+      document.getElementById('edit-title').value = s.title || '';
+      document.getElementById('edit-venue').value = s.venue || '';
+      setDatetimeSplit('edit-date', 'edit-time', s.session_datetime);
+      setDatetimeSplit('edit-deadline-date', 'edit-deadline-time', s.response_deadline);
+      document.getElementById('edit-max-players').value = s.max_players;
+      document.getElementById('edit-courts').value = s.courts;
+      document.getElementById('edit-court-cost').value = s.court_cost_per_court_pence;
+      document.getElementById('edit-racket').value = s.racket_hire_pence;
+      document.getElementById('edit-notes').value = s.notes || '';
+      document.getElementById('edit-modal').classList.add('show');
+    }
+    function closeEditModal() { document.getElementById('edit-modal').classList.remove('show'); }
+
+    async function saveEdit() {
+      const sid = parseInt(document.getElementById('edit-session-id').value);
+      const body = {
+        title: document.getElementById('edit-title').value.trim() || null,
+        venue: document.getElementById('edit-venue').value.trim() || null,
+        session_datetime: getCombinedDatetime('edit-date', 'edit-time'),
+        response_deadline: getCombinedDatetime('edit-deadline-date', 'edit-deadline-time'),
+        max_players: parseInt(document.getElementById('edit-max-players').value),
+        courts: parseInt(document.getElementById('edit-courts').value),
+        court_cost_per_court_pence: parseInt(document.getElementById('edit-court-cost').value),
+        racket_hire_pence: parseInt(document.getElementById('edit-racket').value),
+        notes: document.getElementById('edit-notes').value.trim() || null
+      };
+      try {
+        await api(`/api/sessions/${sid}`, { method: 'PATCH', body: JSON.stringify(body) });
+        closeEditModal();
+        toast('Session updated');
+        loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    // ---- SQUAD ----
+    async function loadSquad() {
+      try {
+        allUsers = await api('/api/users');
+        renderSquadTab();
+      } catch (e) {
+        document.getElementById('squad-content').innerHTML = `<div class="empty"><p>Failed to load squad: ${e.message}</p></div>`;
+      }
+    }
+
+    function renderSquadTab() {
+      const el = document.getElementById('squad-content');
+      let html = `
+        <div class="section-head">Add New Player</div>
+        <div class="card">
+          <div class="form-row-2">
+            <div>
+              <label>Full Name (displayed)</label>
+              <input type="text" id="new-display-name" placeholder="Darren Hughes" oninput="autoSlugify()">
+            </div>
+            <div>
+              <label>Login Name</label>
+              <input type="text" id="new-username" placeholder="DarrenH" autocapitalize="none" spellcheck="false">
+              <div class="hint">What they type to log in — no spaces</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Avatar</label>
+            <div class="avatar-picker-mini" id="new-avatar-picker">
+              ${AVATAR_CHOICES.map(av => `<div class="avatar-opt-mini ${av === selectedAvatar ? 'selected' : ''}" data-av="${av}" onclick="selectNewAvatar('${av}')">${av}</div>`).join('')}
+            </div>
+          </div>
+          <div class="form-row" style="display:flex;align-items:center;gap:0.75rem;">
+            <input type="checkbox" id="new-priority" style="width:18px;height:18px;accent-color:var(--pickle-yellow);">
+            <label for="new-priority" style="margin:0;color:var(--pickle-yellow);letter-spacing:0;text-transform:none;font-size:0.85rem;font-weight:400;">⭐ Priority player (always suggested for roster)</label>
+          </div>
+          <button class="btn btn-primary" onclick="createUser()">➕ Add to Squad</button>
+        </div>`;
+
+      html += `<div class="section-head" style="margin-top:1.5rem;">Squad Members (${allUsers.length})</div>`;
+
+      if (!allUsers.length) {
+        html += `<div class="empty"><p>No players yet — add the first one above!</p></div>`;
+      } else {
+        allUsers.forEach(u => {
+          html += `<div class="user-row" id="user-row-${u.id}">
+            <div class="user-avatar-mini">${u.avatar || '🥒'}</div>
+            <div style="flex:1;">
+              <div class="user-name">${u.display_name}</div>
+              <div class="user-handle">${u.username}</div>
+            </div>
+            <button class="priority-toggle ${u.is_priority ? 'active' : ''}"
+              onclick="togglePriority(${u.id}, ${u.is_priority})"
+              title="Toggle priority player">⭐</button>
+            <button class="btn btn-red btn-sm" onclick="deleteUser(${u.id})">Remove</button>
+          </div>`;
+        });
+      }
+
+      el.innerHTML = html;
+    }
+
+    function selectNewAvatar(av) {
+      selectedAvatar = av;
+      document.querySelectorAll('#new-avatar-picker .avatar-opt-mini').forEach(el => el.classList.toggle('selected', el.dataset.av === av));
+    }
+
+    function autoSlugify() {
+      const name = document.getElementById('new-display-name').value;
+      const parts = name.trim().split(/\s+/);
+      const slug = parts.map((p, i) => i === 0 ? p : p.charAt(0).toUpperCase() + p.slice(1)).join('');
+      document.getElementById('new-username').value = slug;
+    }
+
+    async function createUser() {
+      const display_name = document.getElementById('new-display-name').value.trim();
+      const username = document.getElementById('new-username').value.trim();
+      const is_priority = document.getElementById('new-priority').checked ? 1 : 0;
+      if (!display_name || !username) { toast('Name and login name are required', true); return; }
+      if (/\s/.test(username)) { toast('Login name cannot contain spaces', true); return; }
+      try {
+        await api('/api/users', {
+          method: 'POST',
+          body: JSON.stringify({ display_name, username, is_priority, avatar: selectedAvatar })
+        });
+        toast(`${display_name} added to the squad!`);
+        selectedAvatar = '🥒';
+        loadSquad();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function togglePriority(uid, currentPriority) {
+      try {
+        await api(`/api/users/${uid}`, { method: 'PATCH', body: JSON.stringify({ is_priority: currentPriority ? 0 : 1 }) });
+        loadSquad();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function deleteUser(uid) {
+      const u = allUsers.find(x => x.id === uid);
+      const name = u?.display_name || 'this player';
+      if (!confirm(`Remove ${name} from the squad? This will delete their account, responses and stats.`)) return;
+      try {
+        await api(`/api/users/${uid}`, { method: 'DELETE' });
+        toast(`${name} removed`);
+        loadSquad();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    // ---- LEADERBOARD ----
+    async function loadLeaderboard() {
+      const el = document.getElementById('leaderboard-content');
+      try {
+        const board = await api('/api/stats/leaderboard');
+        let html = `<div class="section-head">🏆 Squad Leaderboard</div>`;
+        if (!board.length || !board.some(b => b.matches_played > 0)) {
+          html += `<div class="empty"><span class="bi">🏆</span><p>No matches recorded yet — record some results from completed sessions to populate the leaderboard.</p></div>`;
+        } else {
+          html += `<div class="card" style="padding:0;">`;
+          board.forEach((p, i) => {
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
+            html += `<div style="display:flex;align-items:center;gap:0.85rem;padding:0.75rem 1rem;border-bottom:1px solid #333;">
+              <div style="width:32px;font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:1px;color:var(--pickle-yellow);text-align:center;">${medal}</div>
+              <div style="font-size:1.4rem;width:32px;text-align:center;">${p.avatar || '🥒'}</div>
+              <div style="flex:1;">
+                <div style="font-weight:600;">${p.display_name}${p.is_priority ? ' ⭐' : ''}</div>
+                <div style="font-size:0.72rem;color:#888;">${p.matches_played} matches · ${p.sessions_attended} sessions · ${p.yes_rate}% yes-rate</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:1px;color:var(--pickle-light);"><strong>${p.wins}</strong>W · ${p.losses}L</div>
+                <div style="font-size:0.72rem;color:#888;">${p.win_rate}% win rate</div>
+              </div>
+            </div>`;
+          });
+          html += `</div>`;
+        }
+        el.innerHTML = html;
+      } catch (e) {
+        el.innerHTML = `<div class="empty"><p>Couldn't load: ${e.message}</p></div>`;
+      }
+    }
+
+    // ---- Init ----
+    async function init() {
+      const meRes = await fetch('/api/auth/me').catch(() => null);
+      if (!meRes?.ok) { window.location.replace('/admin.html'); return; }
+      const me = await meRes.json();
+      if (!me.admin) { window.location.replace('/admin.html'); return; }
+      loadSessions();
+      loadSquad();
+    }
+
+    init().catch(console.error);
+  </script>
+</body>
+</html>

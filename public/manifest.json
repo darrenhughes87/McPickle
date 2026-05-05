@@ -1,0 +1,32 @@
+{
+  "name": "McPICKLES",
+  "short_name": "McPICKLES",
+  "description": "Pickleball squad scheduling for the estate crew",
+  "display": "standalone",
+  "start_url": "/dashboard.html",
+  "scope": "/",
+  "theme_color": "#2D5038",
+  "background_color": "#2D5038",
+  "orientation": "portrait",
+  "categories": ["sports", "lifestyle", "social"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "My sessions",
+      "url": "/dashboard.html",
+      "description": "See upcoming sessions"
+    },
+    {
+      "name": "Leaderboard",
+      "url": "/dashboard.html#leaderboard",
+      "description": "Squad league table"
+    }
+  ]
+}

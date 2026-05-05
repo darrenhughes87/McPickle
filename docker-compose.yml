@@ -1,0 +1,40 @@
+services:
+  mcpickles:
+    build: .
+    container_name: mcpickles
+    restart: unless-stopped
+    environment:
+      - PORT=3003
+      - NODE_ENV=production
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_CONTACT_EMAIL=${VAPID_CONTACT_EMAIL}
+      - TZ=Europe/London
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3003/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - mcpickles_data:/app/data
+    networks:
+      - default
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.mcpickles.rule=Host(`mcpickles.pivotalsl.co.uk`)
+      - traefik.http.routers.mcpickles.entrypoints=web,websecure
+      - traefik.http.routers.mcpickles.tls=true
+      - traefik.http.routers.mcpickles.tls.certresolver=mytlschallenge
+      - traefik.http.services.mcpickles.loadbalancer.server.port=3003
+      - traefik.docker.network=n8n_default
+
+volumes:
+  mcpickles_data:
+
+networks:
+  traefik:
+    external: true
+    name: n8n_default
