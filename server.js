@@ -169,9 +169,12 @@ function generateToken() {
   return randomBytes(32).toString('hex');
 }
 
+const ADMIN_SESSION_MS = 30 * 24 * 60 * 60 * 1000;  // 30 days
+const USER_SESSION_MS  = 60 * 24 * 60 * 60 * 1000;  // 60 days
+
 function createAuthSession(userId, isAdmin) {
   const token = generateToken();
-  const durationMs = isAdmin ? 24 * 60 * 60 * 1000 : 60 * 24 * 60 * 60 * 1000;
+  const durationMs = isAdmin ? ADMIN_SESSION_MS : USER_SESSION_MS;
   const expiresAt = new Date(Date.now() + durationMs).toISOString().replace('Z', '').slice(0, 19);
   db.prepare(`INSERT INTO auth_sessions (token, user_id, is_admin, expires_at) VALUES (?, ?, ?, ?)`)
     .run(token, userId ?? null, isAdmin ? 1 : 0, expiresAt);
@@ -372,13 +375,14 @@ app.use(cookieParser());
 app.use(express.static(join(__dirname, 'public')));
 
 // Cookies: secure only in prod (so http://localhost works in dev)
+// maxAge is in milliseconds (Express converts to Max-Age seconds in the header)
 function cookieOpts(isAdmin) {
   return {
     httpOnly: true,
     secure: IS_PROD,
     sameSite: 'strict',
     path: '/',
-    maxAge: isAdmin ? 86400 : 5184000
+    maxAge: isAdmin ? ADMIN_SESSION_MS : USER_SESSION_MS
   };
 }
 
