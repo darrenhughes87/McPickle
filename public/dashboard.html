@@ -1399,15 +1399,58 @@
       if (testBtn) {
         testBtn.addEventListener('click', async () => {
           const msg = document.getElementById('push-msg');
-          if (Notification.permission !== 'granted') {
-            const result = await Notification.requestPermission();
-            if (result === 'granted') await subscribePush();
-            else { msg.textContent = 'Notifications are blocked — enable in your browser settings.'; return; }
+          msg.style.color = '';
+          const { isIOS, isStandalone } = detectPlatform();
+
+          // Pre-flight checks
+          if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            msg.style.color = '#cf7e7e';
+            msg.innerHTML = "This browser can't do push notifications.";
+            return;
           }
+          if (isIOS && !isStandalone) {
+            msg.style.color = '#cf7e7e';
+            msg.innerHTML = "On iPhone you need to install McPICKLES to your home screen first, then open it from there. Use the <em>Show me the app guide</em> button above.";
+            return;
+          }
+
+          // Permission
+          if (Notification.permission === 'denied') {
+            msg.style.color = '#cf7e7e';
+            msg.innerHTML = "Notifications are blocked for this site. Open your browser's site settings and allow notifications, then try again.";
+            return;
+          }
+          if (Notification.permission === 'default') {
+            const result = await Notification.requestPermission();
+            if (result !== 'granted') {
+              msg.style.color = '#cf7e7e';
+              msg.textContent = "You declined notifications — try again and tap Allow.";
+              return;
+            }
+          }
+
+          // Subscribe (idempotent — re-runs if existing sub is missing)
+          msg.textContent = "Setting up subscription…";
+          const subbed = await subscribePush();
+          if (!subbed) {
+            msg.style.color = '#cf7e7e';
+            msg.textContent = "Couldn't subscribe — check the browser console for details.";
+            return;
+          }
+
+          // Send
+          msg.textContent = "Sending…";
           try {
-            await api('/api/push/test', { method: 'POST' });
-            msg.textContent = 'Sent — check your phone!';
+            const res = await api('/api/push/test', { method: 'POST' });
+            if (res.sent) {
+              msg.style.color = '#a8e0a8';
+              msg.textContent = "✅ Sent — check for a notification (it can take a few seconds).";
+            } else {
+              msg.style.color = '#cf7e7e';
+              msg.innerHTML = "Server tried but the push service didn't accept it. Try toggling notifications off/on in browser settings, or re-install the app from the guide above.";
+            }
           } catch (e) {
+            msg.style.color = '#cf7e7e';
             msg.textContent = `Couldn't send: ${e.message}`;
           }
         });
@@ -1707,11 +1750,25 @@
     async function subscribePush() {
       try {
         const reg = await navigator.serviceWorker.ready;
-        const keyRes = await fetch('/api/vapid-public-key');
-        const { key } = await keyRes.json();
-        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
-        await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub }) });
-      } catch (err) { console.warn('Push subscribe failed:', err); }
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          const keyRes = await fetch('/api/vapid-public-key');
+          const { key } = await keyRes.json();
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(key)
+          });
+        }
+        const res = await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscription: sub })
+        });
+        return res.ok;
+      } catch (err) {
+        console.warn('Push subscribe failed:', err);
+        return false;
+      }
     }
 
     // ---- Pickle fact ----
