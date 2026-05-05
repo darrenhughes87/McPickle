@@ -1429,9 +1429,9 @@
             }
           }
 
-          // Subscribe (idempotent — re-runs if existing sub is missing)
-          msg.textContent = "Setting up subscription…";
-          const subbed = await subscribePush();
+          // Force a fresh subscription (drops cached/stale sub, re-keys with current VAPID)
+          msg.textContent = "Refreshing subscription…";
+          const subbed = await subscribePush({ forceFresh: true });
           if (!subbed) {
             msg.style.color = '#cf7e7e';
             msg.textContent = "Couldn't subscribe — check the browser console for details.";
@@ -1445,9 +1445,14 @@
             if (res.sent) {
               msg.style.color = '#a8e0a8';
               msg.textContent = "✅ Sent — check for a notification (it can take a few seconds).";
+            } else if (res.reason === 'no-subscription') {
+              msg.style.color = '#cf7e7e';
+              msg.textContent = "Browser sent a subscription but the server lost it. Try once more.";
             } else {
               msg.style.color = '#cf7e7e';
-              msg.innerHTML = "Server tried but the push service didn't accept it. Try toggling notifications off/on in browser settings, or re-install the app from the guide above.";
+              const code = res.statusCode ? ` (HTTP ${res.statusCode})` : '';
+              const detail = res.detail ? ` — ${res.detail}` : '';
+              msg.innerHTML = `Push service rejected the message${code}${detail}<br><br>Check Settings → Apps → Chrome → Notifications and Battery is set to Unrestricted.`;
             }
           } catch (e) {
             msg.style.color = '#cf7e7e';
@@ -1747,16 +1752,23 @@
       }
     }
 
-    async function subscribePush() {
+    async function subscribePush({ forceFresh = false } = {}) {
       try {
         const reg = await navigator.serviceWorker.ready;
+        const keyRes = await fetch('/api/vapid-public-key');
+        const { key } = await keyRes.json();
+        const keyBytes = urlBase64ToUint8Array(key);
+
         let sub = await reg.pushManager.getSubscription();
+        // If forced, or existing subscription was made with a different VAPID key, drop and re-create
+        if (sub && (forceFresh || !applicationServerKeyMatches(sub, keyBytes))) {
+          try { await sub.unsubscribe(); } catch {}
+          sub = null;
+        }
         if (!sub) {
-          const keyRes = await fetch('/api/vapid-public-key');
-          const { key } = await keyRes.json();
           sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(key)
+            applicationServerKey: keyBytes
           });
         }
         const res = await fetch('/api/push/subscribe', {
@@ -1769,6 +1781,18 @@
         console.warn('Push subscribe failed:', err);
         return false;
       }
+    }
+
+    function applicationServerKeyMatches(sub, keyBytes) {
+      try {
+        const opts = sub.options;
+        const existing = opts?.applicationServerKey;
+        if (!existing) return false;
+        const a = new Uint8Array(existing);
+        if (a.length !== keyBytes.length) return false;
+        for (let i = 0; i < a.length; i++) if (a[i] !== keyBytes[i]) return false;
+        return true;
+      } catch { return false; }
     }
 
     // ---- Pickle fact ----

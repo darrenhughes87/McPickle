@@ -563,13 +563,31 @@ app.post('/api/push/unsubscribe', requireUser, (req, res) => {
 
 app.post('/api/push/test', requireUser, async (req, res) => {
   if (req.adminSession) return res.status(403).json({ error: 'Admin has no push subscription' });
-  const ok = await sendPushToUser(req.user.id, {
-    title: 'McPICKLES 🥒 — Test',
-    body: 'Push notifications are working!',
-    url: '/dashboard.html',
-    tag: 'test'
-  });
-  res.json({ ok, sent: ok });
+  const user = db.prepare('SELECT push_sub FROM users WHERE id = ?').get(req.user.id);
+  if (!user?.push_sub) {
+    return res.json({ ok: true, sent: false, reason: 'no-subscription' });
+  }
+  try {
+    await webpush.sendNotification(JSON.parse(user.push_sub), JSON.stringify({
+      title: 'McPICKLES 🥒 — Test',
+      body: 'Push notifications are working!',
+      url: '/dashboard.html',
+      tag: 'test'
+    }));
+    res.json({ ok: true, sent: true });
+  } catch (err) {
+    console.error(`[push test] user ${req.user.id} failed:`, err.statusCode, err.body || err.message);
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      db.prepare('UPDATE users SET push_sub = NULL WHERE id = ?').run(req.user.id);
+    }
+    res.json({
+      ok: true,
+      sent: false,
+      reason: 'push-rejected',
+      statusCode: err.statusCode,
+      detail: (err.body || err.message || '').toString().slice(0, 300)
+    });
+  }
 });
 
 // --- Routes: Pickle Sessions ---
