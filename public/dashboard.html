@@ -607,6 +607,50 @@
     }
     .save-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--black); }
 
+    /* Availability grid */
+    .avail-grid {
+      display: grid;
+      grid-template-columns: 70px repeat(3, 1fr);
+      gap: 0.3rem;
+      margin: 0.5rem 0;
+    }
+    .avail-grid .av-h {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--pickle-dark);
+      text-align: center;
+      padding: 0.3rem 0;
+    }
+    .avail-grid .av-day {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--pickle-dark);
+      align-self: center;
+      padding-left: 0.25rem;
+    }
+    .av-cell {
+      background: #e8e8e8;
+      border: 2px solid #c0c0c0;
+      border-radius: 4px;
+      padding: 0.4rem 0.25rem;
+      text-align: center;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.1s;
+      color: #888;
+      user-select: none;
+    }
+    .av-cell:hover { background: #d8d8d8; }
+    .av-cell.on {
+      background: var(--pickle-dark);
+      border-color: var(--pickle-dark);
+      color: var(--cream);
+    }
+    .av-cell .ico { display: block; font-size: 1rem; margin-bottom: 0.05rem; }
+
     /* Empty state */
     .empty-state {
       text-align: center;
@@ -777,6 +821,20 @@
     </div>
   </nav>
 
+  <!-- Onboarding modal (first-time users) -->
+  <div class="modal-overlay" id="onboarding-modal">
+    <div class="modal" style="max-width:440px;">
+      <h3 style="color:var(--pickle-dark);">👋 Welcome to McPICKLES!</h3>
+      <p>Quick setup before you dive in. Tap the slots when you're <em>usually</em> free — Darren uses this to pick fairer rosters. You can change this later in your profile.</p>
+      <div id="onboarding-grid"></div>
+      <div style="font-size:0.8rem;color:#666;margin:0.75rem 0 1rem;">Don't worry — this is just a guide, you'll still respond to each session individually.</div>
+      <div class="modal-btns">
+        <button class="btn-cancel" id="onboarding-skip">Skip for now</button>
+        <button class="btn-confirm" id="onboarding-save" style="background:var(--pickle-dark);color:var(--cream);">Save &amp; Get Started</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Leave squad modal -->
   <div class="modal-overlay" id="leave-modal">
     <div class="modal">
@@ -806,6 +864,48 @@
   <script>
     const KEENNESS_LABELS = ['', '🔥 Extremely Keen', '😊 Fairly Keen', '👍 Happy to Help', '😐 Not That Arsed'];
     const AVATAR_CHOICES = ['🥒','🏓','🥎','🎾','🏆','🔥','⚡','💪','🎯','🦾','🦸','🥷','🧙','🧑','👩','👨','🧔','👴','👵','🐶','🐱','🐼','🦊','🐯','🦁','🐻','🐸','🦖'];
+    const DAYS = [
+      { key: 'mon', label: 'Mon' }, { key: 'tue', label: 'Tue' }, { key: 'wed', label: 'Wed' },
+      { key: 'thu', label: 'Thu' }, { key: 'fri', label: 'Fri' }, { key: 'sat', label: 'Sat' }, { key: 'sun', label: 'Sun' }
+    ];
+    const SLOTS = [
+      { key: 'morning',   label: 'Morning',   ico: '🌅' },
+      { key: 'afternoon', label: 'Afternoon', ico: '☀️' },
+      { key: 'evening',   label: 'Evening',   ico: '🌆' }
+    ];
+
+    function emptyAvailability() {
+      const a = {};
+      DAYS.forEach(d => { a[d.key] = { morning: false, afternoon: false, evening: false }; });
+      return a;
+    }
+
+    function renderAvailGrid(containerId, availability, onChange) {
+      const data = availability || emptyAvailability();
+      let html = `<div class="avail-grid">
+        <div class="av-h"></div>
+        ${SLOTS.map(s => `<div class="av-h">${s.label}</div>`).join('')}`;
+      DAYS.forEach(d => {
+        html += `<div class="av-day">${d.label}</div>`;
+        SLOTS.forEach(s => {
+          const on = data[d.key]?.[s.key] ? ' on' : '';
+          html += `<div class="av-cell${on}" data-d="${d.key}" data-s="${s.key}"><span class="ico">${s.ico}</span></div>`;
+        });
+      });
+      html += `</div>`;
+      const el = document.getElementById(containerId);
+      el.innerHTML = html;
+      el.querySelectorAll('.av-cell').forEach(cell => {
+        cell.addEventListener('click', () => {
+          const d = cell.dataset.d, s = cell.dataset.s;
+          if (!data[d]) data[d] = {};
+          data[d][s] = !data[d][s];
+          cell.classList.toggle('on', data[d][s]);
+          onChange?.(data);
+        });
+      });
+      return data;
+    }
 
     let currentUser = null;
     let allSessions = [];
@@ -1204,7 +1304,17 @@
             <input type="text" id="profile-name-input" value="${u.display_name}" maxlength="40">
           </div>
 
-          <button class="save-btn" onclick="saveProfile()">Save profile</button>
+          <div class="form-row">
+            <label>Login name</label>
+            <input type="text" id="profile-username-input" value="${u.username}" maxlength="40" autocapitalize="none" spellcheck="false">
+            <div style="font-size:0.7rem;color:#888;margin-top:0.2rem;">What you type when signing in. No spaces.</div>
+          </div>
+
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:1px;color:var(--pickle-dark);margin:1rem 0 0.25rem;text-align:center;">When are you usually free?</div>
+          <div style="font-size:0.78rem;color:#666;text-align:center;margin-bottom:0.4rem;">Tap the slots that work for you</div>
+          <div id="profile-avail-grid"></div>
+
+          <button class="save-btn" onclick="saveProfile()" style="margin-top:0.75rem;">Save profile</button>
           <div id="profile-msg" style="margin-top:0.5rem;text-align:center;"></div>
         </div>
 
@@ -1220,6 +1330,11 @@
           <button class="leave-btn" onclick="openLeaveModal()">Leave the squad</button>
         </div>
       `;
+
+      // Render availability grid (mutates currentUser.availability in place)
+      currentUser.availability = renderAvailGrid('profile-avail-grid', currentUser.availability, (data) => {
+        currentUser.availability = data;
+      });
 
       const testBtn = document.getElementById('push-test-btn');
       if (testBtn) {
@@ -1249,14 +1364,23 @@
 
     async function saveProfile() {
       const name = document.getElementById('profile-name-input').value.trim();
+      const username = document.getElementById('profile-username-input').value.trim();
       const msg = document.getElementById('profile-msg');
-      if (!name) { msg.innerHTML = `<span style="color:var(--red);">Name can't be empty</span>`; return; }
+      if (!name) { msg.innerHTML = `<span style="color:var(--red);">Display name can't be empty</span>`; return; }
+      if (!username) { msg.innerHTML = `<span style="color:var(--red);">Login name can't be empty</span>`; return; }
+      if (/\s/.test(username)) { msg.innerHTML = `<span style="color:var(--red);">Login name can't contain spaces</span>`; return; }
       try {
         await api(`/api/users/${currentUser.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ display_name: name, avatar: currentUser.avatar })
+          body: JSON.stringify({
+            display_name: name,
+            username,
+            avatar: currentUser.avatar,
+            availability: currentUser.availability
+          })
         });
         currentUser.display_name = name;
+        currentUser.username = username;
         document.getElementById('header-name').textContent = name;
         msg.innerHTML = `<span style="color:#2E7D32;">Saved!</span>`;
         toast('Profile updated 🥒');
@@ -1264,6 +1388,30 @@
         msg.innerHTML = `<span style="color:var(--red);">${e.message}</span>`;
       }
     }
+
+    // ---- Onboarding ----
+    let onboardingAvailability = null;
+    function showOnboarding() {
+      onboardingAvailability = renderAvailGrid('onboarding-grid', currentUser.availability || emptyAvailability(), (data) => {
+        onboardingAvailability = data;
+      });
+      document.getElementById('onboarding-modal').classList.add('show');
+    }
+
+    async function finishOnboarding(saveAvail) {
+      const body = { onboarded: true };
+      if (saveAvail) body.availability = onboardingAvailability;
+      try {
+        await api(`/api/users/${currentUser.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        currentUser.onboarded_at = new Date().toISOString();
+        if (saveAvail) currentUser.availability = onboardingAvailability;
+        document.getElementById('onboarding-modal').classList.remove('show');
+        toast('Welcome aboard! 🥒');
+      } catch (e) { toast(e.message, true); }
+    }
+
+    document.getElementById('onboarding-skip').addEventListener('click', () => finishOnboarding(false));
+    document.getElementById('onboarding-save').addEventListener('click', () => finishOnboarding(true));
 
     // ---- Push notifications ----
     function urlBase64ToUint8Array(base64String) {
@@ -1343,6 +1491,11 @@
       document.getElementById('panel-sessions').classList.add('active');
 
       await Promise.all([loadSessions(), loadFact(), setupPush()]);
+
+      // First-time onboarding
+      if (!currentUser.onboarded_at) {
+        showOnboarding();
+      }
     }
 
     init().catch(console.error);

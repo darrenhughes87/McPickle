@@ -1276,6 +1276,21 @@
       }
     }
 
+    const DAY_KEYS = ['mon','tue','wed','thu','fri','sat','sun'];
+    const DAY_LABELS = { mon:'M', tue:'T', wed:'W', thu:'T', fri:'F', sat:'S', sun:'S' };
+    const SLOT_ICONS = { morning: '🌅', afternoon: '☀️', evening: '🌆' };
+
+    function availSummary(avail) {
+      if (!avail || typeof avail !== 'object') return '<span style="color:#666;font-size:0.7rem;">No availability set</span>';
+      const parts = [];
+      DAY_KEYS.forEach(d => {
+        const slots = avail[d] || {};
+        const active = ['morning','afternoon','evening'].filter(s => slots[s]);
+        if (active.length) parts.push(`<span style="font-size:0.7rem;color:var(--pickle-light);"><strong>${DAY_LABELS[d]}</strong>${active.map(a => SLOT_ICONS[a]).join('')}</span>`);
+      });
+      return parts.length ? parts.join(' · ') : '<span style="color:#666;font-size:0.7rem;">Hasn\'t set availability yet</span>';
+    }
+
     function renderSquadTab() {
       const el = document.getElementById('squad-content');
       let html = `
@@ -1313,9 +1328,10 @@
         allUsers.forEach(u => {
           html += `<div class="user-row" id="user-row-${u.id}">
             <div class="user-avatar-mini">${u.avatar || '🥒'}</div>
-            <div style="flex:1;">
-              <div class="user-name">${u.display_name}</div>
+            <div style="flex:1;min-width:0;">
+              <div class="user-name">${u.display_name}${!u.onboarded_at ? ' <span style="font-size:0.65rem;color:#888;font-weight:400;">(not onboarded)</span>' : ''}</div>
               <div class="user-handle">${u.username}</div>
+              <div style="margin-top:0.25rem;display:flex;gap:0.4rem;flex-wrap:wrap;">${availSummary(u.availability)}</div>
             </div>
             <button class="priority-toggle ${u.is_priority ? 'active' : ''}"
               onclick="togglePriority(${u.id}, ${u.is_priority})"

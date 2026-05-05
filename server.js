@@ -39,6 +39,8 @@ db.exec(`
     is_priority  INTEGER NOT NULL DEFAULT 0,
     push_sub     TEXT,
     avatar       TEXT NOT NULL DEFAULT '🥒',
+    availability TEXT,
+    onboarded_at TEXT,
     created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -131,6 +133,8 @@ function ensureColumn(table, column, ddl) {
   }
 }
 ensureColumn('users', 'avatar', `avatar TEXT NOT NULL DEFAULT '🥒'`);
+ensureColumn('users', 'availability', `availability TEXT`);
+ensureColumn('users', 'onboarded_at', `onboarded_at TEXT`);
 ensureColumn('pickle_sessions', 'venue', `venue TEXT`);
 ensureColumn('pickle_sessions', 'results_recorded', `results_recorded INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('roster_entries', 'is_reserve', `is_reserve INTEGER NOT NULL DEFAULT 0`);
@@ -384,7 +388,8 @@ function requireUser(req, res, next) {
 
   const session = db.prepare(`
     SELECT s.is_admin, s.user_id,
-           u.id AS uid, u.username, u.display_name, u.is_priority, u.avatar
+           u.id AS uid, u.username, u.display_name, u.is_priority, u.avatar,
+           u.availability, u.onboarded_at
     FROM auth_sessions s
     LEFT JOIN users u ON u.id = s.user_id
     WHERE s.token = ? AND s.expires_at > datetime('now')
@@ -402,6 +407,8 @@ function requireUser(req, res, next) {
       display_name: session.display_name,
       is_priority: session.is_priority,
       avatar: session.avatar,
+      availability: session.availability ? JSON.parse(session.availability) : null,
+      onboarded_at: session.onboarded_at,
       is_admin: 0
     };
   }
@@ -440,7 +447,18 @@ app.post('/api/auth/user-login', (req, res) => {
 
   const token = createAuthSession(user.id, false);
   res.cookie('session_token', token, cookieOpts(false));
-  res.json({ ok: true, user: { id: user.id, username: user.username, display_name: user.display_name, is_priority: user.is_priority, avatar: user.avatar } });
+  res.json({
+    ok: true,
+    user: {
+      id: user.id,
+      username: user.username,
+      display_name: user.display_name,
+      is_priority: user.is_priority,
+      avatar: user.avatar,
+      availability: user.availability ? JSON.parse(user.availability) : null,
+      onboarded_at: user.onboarded_at
+    }
+  });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -463,8 +481,8 @@ app.get('/api/fact', (req, res) => {
 
 // --- Routes: Users ---
 app.get('/api/users', requireAdmin, (req, res) => {
-  const users = db.prepare(`SELECT id, username, display_name, is_priority, avatar, created_at FROM users ORDER BY display_name`).all();
-  res.json(users);
+  const users = db.prepare(`SELECT id, username, display_name, is_priority, avatar, availability, onboarded_at, created_at FROM users ORDER BY display_name`).all();
+  res.json(users.map(u => ({ ...u, availability: u.availability ? JSON.parse(u.availability) : null })));
 });
 
 app.post('/api/users', requireAdmin, (req, res) => {
@@ -488,9 +506,27 @@ app.patch('/api/users/:id', requireUser, (req, res) => {
   const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'User not found' });
 
-  const { display_name, is_priority, avatar } = req.body;
-  if (display_name !== undefined) db.prepare(`UPDATE users SET display_name = ? WHERE id = ?`).run(display_name.trim(), id);
+  const { display_name, is_priority, avatar, username, availability, onboarded } = req.body;
+  if (display_name !== undefined) {
+    if (!display_name.trim()) return res.status(400).json({ error: 'Display name cannot be empty' });
+    db.prepare(`UPDATE users SET display_name = ? WHERE id = ?`).run(display_name.trim(), id);
+  }
+  if (username !== undefined) {
+    const trimmed = username.trim();
+    if (!trimmed) return res.status(400).json({ error: 'Username cannot be empty' });
+    if (/\s/.test(trimmed)) return res.status(400).json({ error: 'Username cannot contain spaces' });
+    const conflict = db.prepare('SELECT id FROM users WHERE lower(username) = lower(?) AND id != ?').get(trimmed, id);
+    if (conflict) return res.status(409).json({ error: 'Username already taken' });
+    db.prepare(`UPDATE users SET username = ? WHERE id = ?`).run(trimmed, id);
+  }
   if (avatar !== undefined) db.prepare(`UPDATE users SET avatar = ? WHERE id = ?`).run(avatar, id);
+  if (availability !== undefined) {
+    const json = availability ? JSON.stringify(availability) : null;
+    db.prepare(`UPDATE users SET availability = ? WHERE id = ?`).run(json, id);
+  }
+  if (onboarded === true) {
+    db.prepare(`UPDATE users SET onboarded_at = COALESCE(onboarded_at, datetime('now')) WHERE id = ?`).run(id);
+  }
   // Only admin can flip priority
   if (is_priority !== undefined && req.adminSession) {
     db.prepare(`UPDATE users SET is_priority = ? WHERE id = ?`).run(is_priority ? 1 : 0, id);
@@ -775,14 +811,17 @@ app.get('/api/sessions/:id/responses', requireAdmin, (req, res) => {
 
   const responses = db.prepare(`
     SELECT r.user_id, r.available, r.keenness, r.submitted_at, r.updated_at,
-           u.username, u.display_name, u.is_priority, u.avatar
+           u.username, u.display_name, u.is_priority, u.avatar, u.availability
     FROM responses r
     JOIN users u ON u.id = r.user_id
     WHERE r.session_id = ?
     ORDER BY r.submitted_at ASC
   `).all(id);
 
-  const allUsers = db.prepare('SELECT id, username, display_name, is_priority, avatar FROM users ORDER BY display_name').all();
+  responses.forEach(r => { r.availability = r.availability ? JSON.parse(r.availability) : null; });
+
+  const allUsers = db.prepare('SELECT id, username, display_name, is_priority, avatar, availability FROM users ORDER BY display_name').all();
+  allUsers.forEach(u => { u.availability = u.availability ? JSON.parse(u.availability) : null; });
   const respondedIds = new Set(responses.map(r => r.user_id));
   const nonResponders = allUsers.filter(u => !respondedIds.has(u.id));
 
