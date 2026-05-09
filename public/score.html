@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>McPICKLES — Live Score</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#1A1A1A">
+  <style>
+    :root {
+      --pickle-dark:   #2D5038;
+      --pickle-mid:    #4A7C59;
+      --pickle-light:  #8DB87B;
+      --pickle-yellow: #D4B44A;
+      --black:         #1A1A1A;
+      --cream:         #F5F0E8;
+      --red:           #C0392B;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      height: 100%;
+      font-family: 'Oswald', sans-serif;
+      background: var(--black);
+      color: var(--cream);
+      overflow: hidden;
+    }
+    body {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top bar */
+    .topbar {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 0.85rem;
+      background: var(--pickle-dark);
+      border-bottom: 2px solid var(--black);
+      padding-top: calc(0.6rem + env(safe-area-inset-top, 0px));
+    }
+    .topbar .back-btn, .topbar .undo-btn {
+      background: transparent;
+      color: var(--pickle-light);
+      border: 1.5px solid var(--pickle-mid);
+      border-radius: 4px;
+      padding: 0.35rem 0.7rem;
+      font-family: 'Oswald', sans-serif;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      cursor: pointer;
+    }
+    .topbar .back-btn:hover, .topbar .undo-btn:hover { background: var(--pickle-mid); color: var(--cream); }
+    .topbar .undo-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .topbar .title { flex: 1; text-align: center; font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; font-size: 1.1rem; }
+
+    /* Setup screens */
+    .panel {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      padding: 1.25rem;
+      overflow-y: auto;
+      padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    }
+    .panel.active { display: flex; }
+    .panel h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.6rem;
+      letter-spacing: 2px;
+      color: var(--pickle-light);
+      margin-bottom: 0.5rem;
+    }
+    .panel .help { font-size: 0.85rem; color: #888; margin-bottom: 1rem; }
+
+    /* Roster pool */
+    .roster-pool {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.75rem;
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      border-radius: 6px;
+      min-height: 70px;
+    }
+    .player-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 0.85rem;
+      background: var(--cream);
+      color: var(--black);
+      border: 2px solid var(--black);
+      border-radius: 22px;
+      font-size: 0.92rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    .player-chip:active { transform: scale(0.96); }
+    .player-chip.selected {
+      background: var(--pickle-yellow);
+      box-shadow: 0 0 0 3px rgba(212,180,74,0.35);
+    }
+    .player-chip .av { font-size: 1.1rem; }
+
+    /* Team boxes */
+    .team-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .team-box {
+      background: #1a1a1a;
+      border: 2px dashed #3a3a3a;
+      border-radius: 8px;
+      padding: 0.75rem;
+      min-height: 130px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .team-box:hover { border-color: var(--pickle-mid); }
+    .team-box.has-players { border-style: solid; border-color: var(--pickle-mid); background: #252525; }
+    .team-box.first-server { border-color: var(--pickle-yellow); background: rgba(212,180,74,0.08); }
+    .team-label {
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 1.5px;
+      font-size: 1rem;
+      color: var(--pickle-light);
+      text-align: center;
+      margin-bottom: 0.25rem;
+    }
+    .team-box.first-server .team-label::after {
+      content: ' · SERVING FIRST';
+      color: var(--pickle-yellow);
+      font-size: 0.78rem;
+      letter-spacing: 1px;
+    }
+    .team-box .player-chip { background: var(--pickle-light); }
+
+    .vs-divider {
+      text-align: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.4rem;
+      letter-spacing: 2px;
+      color: #555;
+      margin: 0.5rem 0;
+    }
+
+    /* Buttons */
+    .actions { margin-top: auto; padding-top: 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+    .btn {
+      padding: 0.85rem;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.2rem;
+      letter-spacing: 2px;
+      border: 2px solid var(--black);
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+      transition: transform 0.1s;
+    }
+    .btn:active { transform: translate(1px, 1px); }
+    .btn-primary  { background: var(--pickle-dark); color: var(--cream); border-color: var(--pickle-mid); box-shadow: 3px 3px 0 var(--pickle-dark); }
+    .btn-yellow   { background: var(--pickle-yellow); color: var(--black); border-color: var(--black); box-shadow: 3px 3px 0 var(--black); }
+    .btn-green    { background: #2E7D32; color: var(--cream); border-color: var(--black); box-shadow: 3px 3px 0 var(--black); }
+    .btn-ghost    { background: transparent; color: #aaa; border-color: #444; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    /* Coin flip */
+    .coin {
+      width: 130px; height: 130px;
+      margin: 1.5rem auto;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #f5d76e 0%, #c9a227 70%, #8a6914 100%);
+      border: 5px solid #6a4f0e;
+      box-shadow: 0 6px 0 rgba(0,0,0,0.4), inset 0 -8px 16px rgba(0,0,0,0.3);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 4rem;
+      transition: transform 0.6s ease-out;
+    }
+    .coin.flipping { animation: coin-flip 1s ease-out; }
+    @keyframes coin-flip {
+      0%   { transform: rotateY(0deg)   scale(1); }
+      30%  { transform: rotateY(540deg) scale(1.15); }
+      70%  { transform: rotateY(900deg) scale(1.05); }
+      100% { transform: rotateY(1080deg) scale(1); }
+    }
+    .flip-result {
+      text-align: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.4rem;
+      letter-spacing: 2px;
+      color: var(--pickle-yellow);
+      margin: 1rem 0;
+      min-height: 1.6rem;
+    }
+
+    /* Scoreboard */
+    .board-panel { padding: 0; }
+    .board {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .board-half {
+      flex: 1 1 50%;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      overflow: hidden;
+    }
+    .board-half:active { filter: brightness(1.15); }
+    .board-half.team-a {
+      background: linear-gradient(180deg, #1f4d3a 0%, #2D5038 100%);
+      color: var(--cream);
+    }
+    .board-half.team-b {
+      background: linear-gradient(0deg, #4a3b1a 0%, #6e5a2a 100%);
+      color: var(--cream);
+    }
+    .board-half.serving::before {
+      content: '🏐 SERVING';
+      position: absolute;
+      top: 0.6rem;
+      left: 0.85rem;
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 1.5px;
+      font-size: 0.78rem;
+      color: var(--pickle-yellow);
+      background: rgba(0,0,0,0.4);
+      padding: 0.15rem 0.45rem;
+      border-radius: 3px;
+    }
+    .board-half.winner { background: linear-gradient(180deg, #1a5c1e 0%, #2E7D32 100%); }
+
+    .board-half .team-names {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.15rem;
+      letter-spacing: 1.5px;
+      text-align: center;
+      margin-bottom: 0.5rem;
+      opacity: 0.9;
+    }
+    .board-half .team-names .pname { display: inline-flex; align-items: center; gap: 0.25rem; margin: 0 0.3rem; }
+    .board-half .team-names .pname.serving { color: var(--pickle-yellow); }
+    .board-half .score {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 12rem;
+      letter-spacing: -3px;
+      line-height: 0.85;
+      text-shadow: 4px 4px 0 rgba(0,0,0,0.45);
+    }
+
+    .board-strip {
+      flex: 0 0 auto;
+      background: var(--black);
+      padding: 0.5rem 0.75rem;
+      text-align: center;
+      border-top: 2px solid #3a3a3a;
+      border-bottom: 2px solid #3a3a3a;
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 2px;
+    }
+    .board-strip .call {
+      font-size: 1.6rem;
+      color: var(--pickle-yellow);
+      line-height: 1;
+    }
+    .board-strip .who-serves {
+      font-size: 0.85rem;
+      color: var(--pickle-light);
+      letter-spacing: 1px;
+      margin-top: 0.2rem;
+    }
+
+    /* Game-won overlay */
+    .overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .overlay.show { display: flex; }
+    .overlay .card {
+      background: #2a2a2a;
+      border: 3px solid var(--pickle-yellow);
+      border-radius: 12px;
+      padding: 1.5rem 1.25rem;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+    }
+    .overlay h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.8rem; letter-spacing: 2px; color: var(--pickle-yellow); }
+    .overlay .winner-line {
+      font-size: 1rem;
+      color: var(--cream);
+      margin: 0.5rem 0 0.25rem;
+    }
+    .overlay .final {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 3.5rem;
+      letter-spacing: 2px;
+      color: var(--pickle-light);
+      margin: 0.5rem 0 1rem;
+    }
+    .overlay .modal-btns { display: flex; flex-direction: column; gap: 0.5rem; }
+
+    /* Side switch alert */
+    .switch-alert {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--pickle-yellow);
+      color: var(--black);
+      border: 3px solid var(--black);
+      border-radius: 8px;
+      padding: 1rem 1.5rem;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.4rem;
+      letter-spacing: 2px;
+      text-align: center;
+      z-index: 90;
+      display: none;
+      box-shadow: 6px 6px 0 rgba(0,0,0,0.5);
+    }
+    .switch-alert.show { display: block; animation: pop-in 0.25s ease-out; }
+    @keyframes pop-in { from { transform: translate(-50%, -50%) scale(0.7); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+    .switch-alert button {
+      display: block;
+      width: 100%;
+      margin-top: 0.75rem;
+      padding: 0.5rem;
+      background: var(--black);
+      color: var(--pickle-yellow);
+      border: 2px solid var(--black);
+      border-radius: 4px;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.1rem;
+      letter-spacing: 1.5px;
+      cursor: pointer;
+    }
+
+    /* Loading */
+    .loading { display: flex; align-items: center; justify-content: center; flex: 1; color: #777; font-size: 0.9rem; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%);
+      background: var(--pickle-dark); color: var(--cream);
+      border: 2px solid var(--pickle-mid);
+      border-radius: 6px; padding: 0.55rem 1.1rem;
+      font-size: 0.85rem; font-weight: 600;
+      opacity: 0; transition: opacity 0.3s;
+      pointer-events: none; z-index: 999; white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+    #toast.error { background: #5c1a1a; border-color: var(--red); }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <button class="back-btn" id="back-btn">← Back</button>
+    <div class="title" id="bar-title">Live Score</div>
+    <button class="undo-btn" id="undo-btn" style="display:none;">⟳ Undo</button>
+  </div>
+
+  <!-- LOADING -->
+  <div class="panel active" id="panel-loading"><div class="loading">Loading session…</div></div>
+
+  <!-- STEP 1: Pick teams -->
+  <div class="panel" id="panel-teams">
+    <h2>Pick the teams</h2>
+    <div class="help">Tap a player chip to select, then tap a team box to drop them in. Or tap 🎲 to randomise.</div>
+
+    <div class="roster-pool" id="roster-pool"></div>
+
+    <div class="team-row">
+      <div class="team-box" id="team-a-box" data-team="A">
+        <div class="team-label">Team A</div>
+      </div>
+      <div class="team-box" id="team-b-box" data-team="B">
+        <div class="team-label">Team B</div>
+      </div>
+    </div>
+
+    <div style="font-size:0.85rem;color:#888;margin-top:0.75rem;text-align:center;" id="mode-label">Pick at least one player per side</div>
+
+    <div class="actions">
+      <button class="btn btn-yellow" id="random-btn">🎲 Random teams</button>
+      <button class="btn btn-primary" id="teams-next-btn" disabled>Next →</button>
+    </div>
+  </div>
+
+  <!-- STEP 2: Coin flip -->
+  <div class="panel" id="panel-flip">
+    <h2>Who serves first?</h2>
+    <div class="help">Flip a coin or just tap a team to nominate them.</div>
+
+    <div class="team-row">
+      <div class="team-box has-players" id="flip-team-a-box" data-team="A">
+        <div class="team-label">Team A</div>
+        <div id="flip-team-a-players"></div>
+      </div>
+      <div class="team-box has-players" id="flip-team-b-box" data-team="B">
+        <div class="team-label">Team B</div>
+        <div id="flip-team-b-players"></div>
+      </div>
+    </div>
+
+    <div class="coin" id="coin">🪙</div>
+    <div class="flip-result" id="flip-result"></div>
+
+    <div class="actions">
+      <button class="btn btn-yellow" id="flip-btn">🪙 Flip the coin</button>
+      <button class="btn btn-primary" id="start-btn" disabled>▶ Start match</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: Scoreboard -->
+  <div class="panel board-panel" id="panel-board">
+    <div class="board">
+      <div class="board-half team-a" id="board-a">
+        <div class="team-names" id="board-a-names"></div>
+        <div class="score" id="board-a-score">0</div>
+      </div>
+      <div class="board-strip">
+        <div class="call" id="board-call">0–0–start</div>
+        <div class="who-serves" id="board-who-serves"></div>
+      </div>
+      <div class="board-half team-b" id="board-b">
+        <div class="team-names" id="board-b-names"></div>
+        <div class="score" id="board-b-score">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Side-switch alert -->
+  <div class="switch-alert" id="switch-alert">
+    🔄 SWITCH ENDS!
+    <div style="font-family:'Oswald',sans-serif;font-weight:400;font-size:0.78rem;letter-spacing:0.5px;margin-top:0.35rem;text-transform:none;">Someone hit 6 points</div>
+    <button id="switch-ok">Got it</button>
+  </div>
+
+  <!-- Game-won overlay -->
+  <div class="overlay" id="overlay">
+    <div class="card">
+      <h3 id="overlay-title">🏆 GAME OVER</h3>
+      <div class="winner-line" id="overlay-winner"></div>
+      <div class="final" id="overlay-final"></div>
+      <div class="modal-btns">
+        <button class="btn btn-green" id="ov-save-next">💾 Save &amp; start next match</button>
+        <button class="btn btn-primary" id="ov-save-finish">💾 Save &amp; finish</button>
+        <button class="btn btn-ghost" id="ov-discard">✕ Discard this game</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    // ---- Config ----
+    const params = new URLSearchParams(location.search);
+    const SESSION_ID = parseInt(params.get('session') || '0');
+    const STORAGE_KEY = `mp_score_${SESSION_ID}`;
+    const GAME_TO = 11;
+    const SWITCH_AT = 6;
+
+    // ---- State ----
+    let session = null;
+    let roster = [];               // [{id, display_name, avatar}]
+    let selectedChip = null;       // currently-armed chip in pick-teams
+    let teams = { A: [], B: [] };  // arrays of user_id
+    let firstServer = null;        // 'A' | 'B' | null
+
+    let game = null;               // live game state — see initGame()
+    let history = [];              // stack of game snapshots for undo
+    let matchIndex = 1;            // sequence number for the topbar
+
+    let wakeLock = null;
+
+    // ---- Util ----
+    let toastTimer;
+    function toast(msg, isError = false) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = isError ? 'show error' : 'show';
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { el.className = ''; }, 2400);
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    function showPanel(name) {
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.getElementById(`panel-${name}`).classList.add('active');
+    }
+
+    function userById(uid) { return roster.find(u => u.id === uid); }
+    function userName(uid) { const u = userById(uid); return u ? u.display_name : `#${uid}`; }
+    function userAvatar(uid) { const u = userById(uid); return u ? (u.avatar || '🥒') : '🥒'; }
+
+    // ---- Wake lock ----
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try { wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+      }
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (wakeLock !== null && document.visibilityState === 'visible') requestWakeLock();
+    });
+
+    // ---- localStorage persistence (resume in-progress match) ----
+    function saveLocal() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          teams, firstServer, game, history, matchIndex
+        }));
+      } catch {}
+    }
+    function clearLocal() { try { localStorage.removeItem(STORAGE_KEY); } catch {} }
+    function loadLocal() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch { return null; }
+    }
+
+    // ---- Top bar back button ----
+    document.getElementById('back-btn').addEventListener('click', () => {
+      const isLive = game && !game.is_complete;
+      const msg = isLive
+        ? 'Abandon this game? The current score will be lost.'
+        : 'Leave the scoreboard? Saved matches stay.';
+      if (!confirm(msg)) return;
+      clearLocal();
+      window.location.replace('/admin-dash.html');
+    });
+
+    // ============================================================
+    // STEP 1 — Pick teams
+    // ============================================================
+    function renderRoster() {
+      const pool = document.getElementById('roster-pool');
+      const inAnyTeam = new Set([...teams.A, ...teams.B]);
+      const free = roster.filter(u => !inAnyTeam.has(u.id));
+      pool.innerHTML = free.length ? free.map(u => chipHtml(u, false)).join('') :
+        `<div style="color:#666;font-size:0.85rem;font-style:italic;align-self:center;">All players assigned</div>`;
+      pool.querySelectorAll('.player-chip').forEach(c => {
+        c.addEventListener('click', () => selectChip(c, parseInt(c.dataset.uid)));
+      });
+
+      ['A','B'].forEach(side => {
+        const box = document.getElementById(`team-${side.toLowerCase()}-box`);
+        box.classList.toggle('has-players', teams[side].length > 0);
+        const existing = box.querySelectorAll('.player-chip');
+        existing.forEach(e => e.remove());
+        teams[side].forEach(uid => {
+          const u = userById(uid);
+          if (!u) return;
+          const div = document.createElement('div');
+          div.innerHTML = chipHtml(u, false);
+          const chip = div.firstChild;
+          chip.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            // Tap a chip inside a team box → return to pool
+            teams[side] = teams[side].filter(x => x !== uid);
+            selectedChip = null;
+            renderRoster();
+            updateModeLabel();
+          });
+          box.appendChild(chip);
+        });
+      });
+
+      updateModeLabel();
+    }
+
+    function chipHtml(u, isSelected) {
+      return `<div class="player-chip${isSelected ? ' selected' : ''}" data-uid="${u.id}"><span class="av">${u.avatar || '🥒'}</span>${u.display_name}</div>`;
+    }
+
+    function selectChip(chipEl, uid) {
+      // If already in a team, ignore — that chip's click handler returns to pool
+      const inAnyTeam = teams.A.includes(uid) || teams.B.includes(uid);
+      if (inAnyTeam) return;
+      // Toggle selection
+      document.querySelectorAll('.roster-pool .player-chip').forEach(c => c.classList.remove('selected'));
+      if (selectedChip === uid) { selectedChip = null; return; }
+      selectedChip = uid;
+      chipEl.classList.add('selected');
+    }
+
+    function dropToTeam(side) {
+      if (!selectedChip) {
+        // Nothing armed — show a hint
+        toast('Tap a player chip first', false);
+        return;
+      }
+      teams[side].push(selectedChip);
+      selectedChip = null;
+      renderRoster();
+    }
+
+    document.getElementById('team-a-box').addEventListener('click', () => dropToTeam('A'));
+    document.getElementById('team-b-box').addEventListener('click', () => dropToTeam('B'));
+
+    document.getElementById('random-btn').addEventListener('click', () => {
+      const shuffled = [...roster].sort(() => Math.random() - 0.5);
+      const half = Math.floor(shuffled.length / 2);
+      teams.A = shuffled.slice(0, half).map(u => u.id);
+      teams.B = shuffled.slice(half, half * 2).map(u => u.id);
+      // odd rosters: if 3 players, leave the 3rd out — they sit this one out
+      if (shuffled.length % 2 === 1) {
+        // Already excluded by slice(half, half*2)
+      }
+      selectedChip = null;
+      renderRoster();
+    });
+
+    function updateModeLabel() {
+      const a = teams.A.length, b = teams.B.length;
+      const lbl = document.getElementById('mode-label');
+      const next = document.getElementById('teams-next-btn');
+      next.disabled = !(a > 0 && b > 0 && a === b);
+      let text;
+      if (a === 0 && b === 0) text = 'Pick at least one player per side';
+      else if (a !== b) text = `Teams uneven (${a} vs ${b}) — match them up`;
+      else if (a === 1) text = 'Singles · 1v1';
+      else if (a === 2) text = 'Doubles · 2v2';
+      else text = `${a}v${b}`;
+      const sittingOut = roster.filter(u => !teams.A.includes(u.id) && !teams.B.includes(u.id));
+      if (a > 0 && b > 0 && sittingOut.length) {
+        text += ` · Sitting out: ${sittingOut.map(u => u.display_name).join(', ')}`;
+      }
+      lbl.textContent = text;
+    }
+
+    document.getElementById('teams-next-btn').addEventListener('click', () => {
+      goToFlip();
+    });
+
+    // ============================================================
+    // STEP 2 — Coin flip
+    // ============================================================
+    function goToFlip() {
+      // Render team chips (read-only)
+      ['A','B'].forEach(side => {
+        const target = document.getElementById(`flip-team-${side.toLowerCase()}-players`);
+        target.innerHTML = teams[side].map(uid => chipHtml(userById(uid), false)).join(' ');
+      });
+      firstServer = null;
+      document.getElementById('flip-result').textContent = '';
+      document.getElementById('start-btn').disabled = true;
+      ['flip-team-a-box','flip-team-b-box'].forEach(id => document.getElementById(id).classList.remove('first-server'));
+      showPanel('flip');
+    }
+
+    document.getElementById('flip-btn').addEventListener('click', () => {
+      const coin = document.getElementById('coin');
+      const result = Math.random() < 0.5 ? 'A' : 'B';
+      coin.classList.remove('flipping');
+      void coin.offsetWidth; // restart animation
+      coin.classList.add('flipping');
+      document.getElementById('flip-result').textContent = '';
+      setTimeout(() => {
+        setFirstServer(result);
+        document.getElementById('flip-result').textContent = `Team ${result} serves first!`;
+      }, 1000);
+    });
+
+    function setFirstServer(side) {
+      firstServer = side;
+      ['flip-team-a-box','flip-team-b-box'].forEach(id => document.getElementById(id).classList.remove('first-server'));
+      document.getElementById(`flip-team-${side.toLowerCase()}-box`).classList.add('first-server');
+      document.getElementById('start-btn').disabled = false;
+    }
+
+    document.getElementById('flip-team-a-box').addEventListener('click', () => setFirstServer('A'));
+    document.getElementById('flip-team-b-box').addEventListener('click', () => setFirstServer('B'));
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+      initGame();
+      showPanel('board');
+      requestWakeLock();
+    });
+
+    // ============================================================
+    // STEP 3 — Live scoreboard (TRADITIONAL scoring)
+    // ============================================================
+    function initGame() {
+      // Server slot index: 0 = first player in team's array, 1 = partner.
+      // First serve in a doubles match traditionally counts as Server 2 (only one server before first side-out)
+      const isDoubles = teams.A.length === 2 && teams.B.length === 2;
+      game = {
+        score_a: 0,
+        score_b: 0,
+        serving_team: firstServer,
+        server_number: isDoubles ? 1 : 1,    // singles always 1
+        is_match_start: true,                // applies the special "0-0-start" rule
+        server_slot: 0,                      // 0 or 1 — which player on the serving team is up
+        is_doubles: isDoubles,
+        is_complete: false,
+        switch_acknowledged: false,
+        match_index: matchIndex
+      };
+      history = [];
+      saveLocal();
+      renderBoard();
+    }
+
+    function snapshot() { return JSON.parse(JSON.stringify(game)); }
+    function pushHistory() { history.push(snapshot()); if (history.length > 200) history.shift(); }
+
+    function applyTap(rallyWinner) {
+      if (!game || game.is_complete) return;
+      pushHistory();
+
+      if (rallyWinner === game.serving_team) {
+        // Serving team scored
+        if (rallyWinner === 'A') game.score_a++;
+        else game.score_b++;
+        // Server stays the same player — they switch sides (visual only)
+        game.is_match_start = false;
+      } else {
+        // Receiving team won the rally — server changes, no point added
+        if (!game.is_doubles) {
+          // Singles — every lost rally by serving team is a side-out
+          game.serving_team = (game.serving_team === 'A') ? 'B' : 'A';
+          game.server_slot = 0;
+          game.server_number = 1;
+        } else if (game.is_match_start || game.server_number === 2) {
+          // Side-out (either start-of-match special rule, or already 2nd server)
+          game.serving_team = (game.serving_team === 'A') ? 'B' : 'A';
+          game.server_slot = 0;
+          game.server_number = 1;
+          game.is_match_start = false;
+        } else {
+          // Move from server #1 to #2 — partner takes over
+          game.server_number = 2;
+          game.server_slot = (game.server_slot === 0) ? 1 : 0;
+        }
+      }
+
+      // Check side-switch alert (first time either side hits 6)
+      if (!game.switch_acknowledged && (game.score_a >= SWITCH_AT || game.score_b >= SWITCH_AT)) {
+        // Show alert
+        document.getElementById('switch-alert').classList.add('show');
+        game.switch_acknowledged = true; // even if user dismisses, don't re-fire
+      }
+
+      // Check win
+      checkWin();
+      saveLocal();
+      renderBoard();
+    }
+
+    function checkWin() {
+      const a = game.score_a, b = game.score_b;
+      if ((a >= GAME_TO || b >= GAME_TO) && Math.abs(a - b) >= 2) {
+        game.is_complete = true;
+        showWinOverlay(a > b ? 'A' : 'B');
+      }
+    }
+
+    function renderBoard() {
+      // Scores
+      document.getElementById('board-a-score').textContent = game.score_a;
+      document.getElementById('board-b-score').textContent = game.score_b;
+
+      // Names with serving highlight
+      const renderNames = (side) => {
+        const ids = teams[side];
+        return ids.map((uid, idx) => {
+          const isServingTeam = game.serving_team === side;
+          const isCurServer = isServingTeam && idx === game.server_slot;
+          return `<span class="pname${isCurServer ? ' serving' : ''}">${userAvatar(uid)} ${userName(uid)}</span>`;
+        }).join('·');
+      };
+      document.getElementById('board-a-names').innerHTML = renderNames('A');
+      document.getElementById('board-b-names').innerHTML = renderNames('B');
+
+      // Highlight serving half
+      document.getElementById('board-a').classList.toggle('serving', game.serving_team === 'A');
+      document.getElementById('board-b').classList.toggle('serving', game.serving_team === 'B');
+
+      // Score call
+      const sScore = game.serving_team === 'A' ? game.score_a : game.score_b;
+      const rScore = game.serving_team === 'A' ? game.score_b : game.score_a;
+      const callTail = game.is_match_start ? 'start' : (game.is_doubles ? game.server_number : '—');
+      document.getElementById('board-call').textContent = `${sScore} – ${rScore} – ${callTail}`;
+
+      // Who serves caption
+      const servingPlayer = userName(teams[game.serving_team][game.server_slot]);
+      const sideText = (game.is_doubles && !game.is_match_start) ? ` · server ${game.server_number}` : (game.is_match_start ? ' · start of match' : '');
+      document.getElementById('board-who-serves').textContent = `${servingPlayer} serving${sideText}`;
+
+      // Top bar match # + undo state
+      document.getElementById('bar-title').textContent = `Match #${game.match_index}`;
+      const undoBtn = document.getElementById('undo-btn');
+      undoBtn.style.display = '';
+      undoBtn.disabled = history.length === 0 || game.is_complete;
+    }
+
+    document.getElementById('board-a').addEventListener('click', () => applyTap('A'));
+    document.getElementById('board-b').addEventListener('click', () => applyTap('B'));
+
+    document.getElementById('undo-btn').addEventListener('click', () => {
+      if (!history.length) return;
+      game = history.pop();
+      saveLocal();
+      renderBoard();
+    });
+
+    document.getElementById('switch-ok').addEventListener('click', () => {
+      document.getElementById('switch-alert').classList.remove('show');
+    });
+
+    function showWinOverlay(winner) {
+      const winNames = teams[winner].map(uid => userName(uid)).join(' & ');
+      document.getElementById('overlay-winner').textContent = `${winNames} won!`;
+      document.getElementById('overlay-final').textContent = `${game.score_a} – ${game.score_b}`;
+      document.getElementById(`board-${winner.toLowerCase()}`).classList.add('winner');
+      document.getElementById('overlay').classList.add('show');
+      const undo = document.getElementById('undo-btn');
+      undo.disabled = true;
+    }
+
+    function hideWinOverlay() {
+      document.getElementById('overlay').classList.remove('show');
+      document.getElementById('board-a').classList.remove('winner');
+      document.getElementById('board-b').classList.remove('winner');
+    }
+
+    async function saveCurrentMatch() {
+      const body = {
+        team_a_ids: teams.A,
+        team_b_ids: teams.B,
+        team_a_score: game.score_a,
+        team_b_score: game.score_b
+      };
+      try {
+        await api(`/api/sessions/${SESSION_ID}/results/append`, {
+          method: 'POST',
+          body: JSON.stringify(body)
+        });
+        toast('Match saved 🏆');
+        return true;
+      } catch (e) {
+        toast(e.message, true);
+        return false;
+      }
+    }
+
+    document.getElementById('ov-save-next').addEventListener('click', async () => {
+      const ok = await saveCurrentMatch();
+      if (!ok) return;
+      hideWinOverlay();
+      matchIndex++;
+      // Reset for the next match: keep the squad on the page but go back to team-pick
+      // (so the user can rotate partners). Reset teams + first server.
+      teams = { A: [], B: [] };
+      firstServer = null;
+      selectedChip = null;
+      game = null;
+      history = [];
+      clearLocal();
+      renderRoster();
+      showPanel('teams');
+    });
+
+    document.getElementById('ov-save-finish').addEventListener('click', async () => {
+      const ok = await saveCurrentMatch();
+      if (!ok) return;
+      clearLocal();
+      window.location.replace('/admin-dash.html');
+    });
+
+    document.getElementById('ov-discard').addEventListener('click', () => {
+      if (!confirm('Throw this game away? It won\'t be saved.')) return;
+      hideWinOverlay();
+      matchIndex++;
+      teams = { A: [], B: [] };
+      firstServer = null;
+      selectedChip = null;
+      game = null;
+      history = [];
+      clearLocal();
+      renderRoster();
+      showPanel('teams');
+    });
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    async function init() {
+      if (!SESSION_ID) {
+        toast('Missing session id', true);
+        setTimeout(() => window.location.replace('/admin-dash.html'), 1500);
+        return;
+      }
+      try {
+        const me = await api('/api/auth/me');
+        if (!me.admin) {
+          toast('Admin only — for now', true);
+          setTimeout(() => window.location.replace('/'), 1500);
+          return;
+        }
+        const data = await api(`/api/sessions/${SESSION_ID}/responses`);
+        session = data.session;
+        // Roster = roster_entries, hydrate from responses where available, else from non_responders
+        const userIndex = {};
+        [...data.responses, ...data.non_responders].forEach(u => {
+          userIndex[u.user_id || u.id] = { id: u.user_id || u.id, display_name: u.display_name, avatar: u.avatar || '🥒' };
+        });
+        roster = data.current_roster
+          .map(uid => userIndex[uid])
+          .filter(Boolean);
+        if (!roster.length) {
+          toast('No published roster on this session', true);
+          setTimeout(() => window.location.replace('/admin-dash.html'), 1800);
+          return;
+        }
+
+        // Try to resume an in-progress match from localStorage
+        const cached = loadLocal();
+        if (cached && cached.game && !cached.game.is_complete) {
+          if (confirm('Resume in-progress match?')) {
+            teams = cached.teams;
+            firstServer = cached.firstServer;
+            game = cached.game;
+            history = cached.history || [];
+            matchIndex = cached.matchIndex || 1;
+            renderBoard();
+            showPanel('board');
+            requestWakeLock();
+            return;
+          } else {
+            clearLocal();
+          }
+        }
+
+        renderRoster();
+        showPanel('teams');
+      } catch (e) {
+        toast(`Error: ${e.message}`, true);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

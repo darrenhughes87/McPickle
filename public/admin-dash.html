@@ -817,7 +817,15 @@
           <button class="btn btn-red btn-sm" onclick="cancelSession(${s.id})">❌ Cancel</button>`;
       } else if (s.status === 'closed') {
         if (isPublished) {
+          // Live Score button: only within ~1h before to ~12h after the session start
+          const sessTime = new Date(s.session_datetime).getTime();
+          const now = Date.now();
+          const liveWindow = sessTime - 60*60*1000 <= now && now <= sessTime + 12*60*60*1000;
+          const liveBtn = liveWindow
+            ? `<a class="btn btn-yellow btn-sm" href="/score.html?session=${s.id}">🎯 Live Score</a>`
+            : '';
           actionsHtml = `
+            ${liveBtn}
             <button class="btn btn-yellow btn-sm" onclick="toggleResponses(${s.id})">👥 View Roster</button>
             <button class="btn btn-blue btn-sm" onclick="cloneSession(${s.id})">📋 Clone for next week</button>
             <button class="btn btn-green btn-sm" onclick="toggleResults(${s.id})">📊 Record Results</button>
@@ -1174,7 +1182,8 @@
               team_a_ids: r.team_a_ids,
               team_b_ids: r.team_b_ids,
               team_a_score: r.team_a_score,
-              team_b_score: r.team_b_score
+              team_b_score: r.team_b_score,
+              is_live: r.is_live === 1
             }));
           } else {
             matchesState[sid] = [];
@@ -1208,8 +1217,9 @@
       } else {
         matches.forEach((m, idx) => {
           const teamSize = Math.max(m.team_a_ids.length, m.team_b_ids.length, 2);
+          const liveBadge = m.is_live ? ' <span style="background:rgba(212,180,74,0.2);color:var(--pickle-yellow);padding:0.1rem 0.4rem;border-radius:3px;font-size:0.6rem;letter-spacing:0.5px;">🎯 live</span>' : '';
           html += `<div class="match-row">
-            <div class="team-label" style="font-size:0.65rem;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:0.4rem;">Match ${idx + 1}</div>
+            <div class="team-label" style="font-size:0.65rem;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:0.4rem;">Match ${idx + 1}${liveBadge}</div>
             <div class="match-team-row">
               <div class="match-side">
                 <div class="team-label">Team A</div>

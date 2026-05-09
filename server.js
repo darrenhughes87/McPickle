@@ -105,6 +105,7 @@ db.exec(`
     team_a_score INTEGER NOT NULL,
     team_b_score INTEGER NOT NULL,
     notes        TEXT,
+    is_live      INTEGER NOT NULL DEFAULT 0,
     recorded_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -137,6 +138,7 @@ ensureColumn('users', 'avatar', `avatar TEXT NOT NULL DEFAULT '🥒'`);
 ensureColumn('users', 'availability', `availability TEXT`);
 ensureColumn('users', 'onboarded_at', `onboarded_at TEXT`);
 ensureColumn('pickle_sessions', 'notified_deadline_24h', `notified_deadline_24h INTEGER NOT NULL DEFAULT 0`);
+ensureColumn('match_results', 'is_live', `is_live INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('pickle_sessions', 'venue', `venue TEXT`);
 ensureColumn('pickle_sessions', 'results_recorded', `results_recorded INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('roster_entries', 'is_reserve', `is_reserve INTEGER NOT NULL DEFAULT 0`);
@@ -1160,6 +1162,46 @@ app.post('/api/sessions/:id/results', requireAdmin, (req, res) => {
   checkAchievementsAfterMatch([...allInvolvedUserIds]);
 
   res.json({ ok: true });
+});
+
+// Append a single live-saved match (used by the live scoreboard).
+// Doesn't wipe existing matches — picks the next match_index automatically.
+app.post('/api/sessions/:id/results/append', requireAdmin, (req, res) => {
+  const sessionId = parseInt(req.params.id);
+  const session = db.prepare('SELECT * FROM pickle_sessions WHERE id = ?').get(sessionId);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+
+  const m = req.body;
+  if (!Array.isArray(m?.team_a_ids) || !Array.isArray(m?.team_b_ids)) {
+    return res.status(400).json({ error: 'team_a_ids and team_b_ids arrays required' });
+  }
+  if (typeof m.team_a_score !== 'number' || typeof m.team_b_score !== 'number') {
+    return res.status(400).json({ error: 'Numeric team_a_score and team_b_score required' });
+  }
+  if (!m.team_a_ids.length || !m.team_b_ids.length) {
+    return res.status(400).json({ error: 'Each team must have at least one player' });
+  }
+
+  const next = db.prepare('SELECT COALESCE(MAX(match_index), -1) + 1 AS idx FROM match_results WHERE session_id = ?').get(sessionId).idx;
+
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO match_results (session_id, match_index, team_a_ids, team_b_ids, team_a_score, team_b_score, notes, is_live)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+    `).run(
+      sessionId, next,
+      JSON.stringify(m.team_a_ids),
+      JSON.stringify(m.team_b_ids),
+      m.team_a_score, m.team_b_score,
+      m.notes || null
+    );
+    db.prepare(`UPDATE pickle_sessions SET results_recorded = 1 WHERE id = ?`).run(sessionId);
+  })();
+
+  const involvedUserIds = [...new Set([...m.team_a_ids, ...m.team_b_ids])];
+  checkAchievementsAfterMatch(involvedUserIds);
+
+  res.json({ ok: true, match_index: next });
 });
 
 // --- Routes: Stats / Leaderboard ---
