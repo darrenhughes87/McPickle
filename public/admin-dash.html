@@ -759,12 +759,47 @@
         html += `<div class="empty" style="margin-top:1rem;"><p>No sessions yet — create one above!</p></div>`;
       }
 
+      // Archived (collapsed by default)
+      html += `<div id="archived-section" style="margin-top:2rem;">
+        <div class="section-head" style="cursor:pointer;" onclick="toggleArchived()">
+          <span id="archived-caret">▶</span> Archived
+          <span id="archived-count" style="font-size:0.85rem;color:#666;margin-left:0.4rem;"></span>
+        </div>
+        <div id="archived-list" style="display:none;"></div>
+      </div>`;
+
       el.innerHTML = html;
+      loadArchivedCount();
+    }
+
+    let archivedExpanded = false;
+    let archivedSessions = null;
+    async function loadArchivedCount() {
+      try {
+        const list = await api('/api/sessions/archived');
+        archivedSessions = list;
+        const countEl = document.getElementById('archived-count');
+        if (countEl) countEl.textContent = list.length ? `(${list.length})` : '(none yet)';
+      } catch (e) { /* silent */ }
+    }
+    function toggleArchived() {
+      archivedExpanded = !archivedExpanded;
+      const caret = document.getElementById('archived-caret');
+      const list = document.getElementById('archived-list');
+      caret.textContent = archivedExpanded ? '▼' : '▶';
+      list.style.display = archivedExpanded ? 'block' : 'none';
+      if (archivedExpanded && archivedSessions) {
+        if (!archivedSessions.length) {
+          list.innerHTML = `<div class="empty" style="margin-top:0.5rem;"><p>No archived sessions yet. Once you've recorded results for a session, archive it here to keep the Sessions list tidy. Stats and league still count archived sessions.</p></div>`;
+        } else {
+          list.innerHTML = archivedSessions.map(s => renderSessionCard({ ...s, available_count: s.available_count || 0, total_responses: s.total_responses || 0 })).join('');
+        }
+      }
     }
 
     function renderSessionCard(s) {
       const courtTotal = s.courts * s.court_cost_per_court_pence;
-      const pillClass = { draft: 'pill-draft', open: 'pill-open', closed: 'pill-closed', cancelled: 'pill-cancelled' }[s.status] || 'pill-draft';
+      const pillClass = { draft: 'pill-draft', open: 'pill-open', closed: 'pill-closed', cancelled: 'pill-cancelled', archived: 'pill-closed' }[s.status] || 'pill-draft';
       const isPublished = s.roster_published === 1;
 
       let actionsHtml = '';
@@ -786,15 +821,23 @@
             <button class="btn btn-yellow btn-sm" onclick="toggleResponses(${s.id})">👥 View Roster</button>
             <button class="btn btn-blue btn-sm" onclick="cloneSession(${s.id})">📋 Clone for next week</button>
             <button class="btn btn-green btn-sm" onclick="toggleResults(${s.id})">📊 Record Results</button>
+            <button class="btn btn-ghost btn-sm" onclick="archiveSession(${s.id})">🗄 Archive</button>
             <button class="btn btn-red btn-sm" onclick="cancelSession(${s.id})">❌ Cancel</button>`;
         } else {
           actionsHtml = `
             <button class="btn btn-yellow btn-sm" onclick="toggleResponses(${s.id})">👥 Pick Squad (${s.available_count} avail)</button>
             <button class="btn btn-blue btn-sm" onclick="cloneSession(${s.id})">📋 Clone</button>
+            <button class="btn btn-ghost btn-sm" onclick="archiveSession(${s.id})">🗄 Archive</button>
             <button class="btn btn-red btn-sm" onclick="cancelSession(${s.id})">❌ Cancel</button>`;
         }
       } else if (s.status === 'cancelled') {
-        actionsHtml = `<span style="font-size:0.78rem;color:#666;">Cancelled</span>`;
+        actionsHtml = `
+          <span style="font-size:0.78rem;color:#666;">Cancelled</span>
+          <button class="btn btn-ghost btn-sm" onclick="archiveSession(${s.id})">🗄 Archive</button>`;
+      } else if (s.status === 'archived') {
+        actionsHtml = `
+          <button class="btn btn-yellow btn-sm" onclick="toggleResponses(${s.id})">👀 View</button>
+          <button class="btn btn-ghost btn-sm" onclick="unarchiveSession(${s.id})">↩️ Unarchive</button>`;
       }
 
       return `<div class="session-admin-card" id="sac-${s.id}">
@@ -880,6 +923,23 @@
       try {
         await api(`/api/sessions/${id}`, { method: 'DELETE' });
         toast('Draft deleted');
+        loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function archiveSession(id) {
+      if (!confirm('Archive this session? It will be hidden from the main list but stats and league will still count it. You can unarchive later.')) return;
+      try {
+        await api(`/api/sessions/${id}/archive`, { method: 'POST' });
+        toast('Session archived 🗄');
+        loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function unarchiveSession(id) {
+      try {
+        await api(`/api/sessions/${id}/unarchive`, { method: 'POST' });
+        toast('Session unarchived');
         loadSessions();
       } catch (e) { toast(e.message, true); }
     }

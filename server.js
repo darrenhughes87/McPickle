@@ -605,7 +605,7 @@ app.get('/api/sessions', requireUser, (req, res) => {
       (SELECT COUNT(*) FROM responses r WHERE r.session_id = ps.id AND r.available = 1) AS available_count,
       (SELECT COUNT(*) FROM responses r WHERE r.session_id = ps.id) AS total_responses
     FROM pickle_sessions ps
-    WHERE ps.status NOT IN ('cancelled') AND (ps.status != 'draft' OR ${isAdmin ? '1=1' : '1=0'})
+    WHERE ps.status NOT IN ('cancelled', 'archived') AND (ps.status != 'draft' OR ${isAdmin ? '1=1' : '1=0'})
     ORDER BY ps.session_datetime ASC
   `).all();
 
@@ -699,7 +699,13 @@ app.patch('/api/sessions/:id', requireAdmin, (req, res) => {
     return res.status(409).json({ error: 'Cannot modify a cancelled session' });
   }
 
-  const VALID_TRANSITIONS = { draft: ['open', 'cancelled'], open: ['closed', 'cancelled'], closed: ['cancelled'] };
+  const VALID_TRANSITIONS = {
+    draft: ['open', 'cancelled'],
+    open: ['closed', 'cancelled'],
+    closed: ['cancelled', 'archived'],
+    cancelled: ['archived'],
+    archived: ['closed']
+  };
   if (req.body.status !== undefined && req.body.status !== session.status) {
     const allowed = VALID_TRANSITIONS[session.status] || [];
     if (!allowed.includes(req.body.status)) {
@@ -741,6 +747,40 @@ app.post('/api/sessions/:id/publish', requireAdmin, async (req, res) => {
   });
 
   res.json({ ok: true });
+});
+
+app.post('/api/sessions/:id/archive', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const session = db.prepare('SELECT * FROM pickle_sessions WHERE id = ?').get(id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  if (!['closed', 'cancelled'].includes(session.status)) {
+    return res.status(409).json({ error: 'Only closed or cancelled sessions can be archived' });
+  }
+  db.prepare(`UPDATE pickle_sessions SET status='archived', updated_at=datetime('now') WHERE id=?`).run(id);
+  res.json({ ok: true });
+});
+
+app.post('/api/sessions/:id/unarchive', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const session = db.prepare('SELECT * FROM pickle_sessions WHERE id = ?').get(id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  if (session.status !== 'archived') return res.status(409).json({ error: 'Session is not archived' });
+  db.prepare(`UPDATE pickle_sessions SET status='closed', updated_at=datetime('now') WHERE id=?`).run(id);
+  res.json({ ok: true });
+});
+
+// Admin-only list of archived sessions (for the collapsible "Archived" section)
+app.get('/api/sessions/archived', requireAdmin, (req, res) => {
+  const sessions = db.prepare(`
+    SELECT ps.*,
+      (SELECT COUNT(*) FROM responses r WHERE r.session_id = ps.id AND r.available = 1) AS available_count,
+      (SELECT COUNT(*) FROM responses r WHERE r.session_id = ps.id) AS total_responses,
+      (SELECT COUNT(*) FROM match_results mr WHERE mr.session_id = ps.id) AS match_count
+    FROM pickle_sessions ps
+    WHERE ps.status = 'archived'
+    ORDER BY ps.session_datetime DESC
+  `).all();
+  res.json(sessions);
 });
 
 app.post('/api/sessions/:id/cancel', requireAdmin, async (req, res) => {
@@ -1221,7 +1261,7 @@ async function runCronTasks() {
     FROM roster_entries re
     JOIN pickle_sessions ps ON ps.id = re.session_id
     WHERE ps.roster_published = 1
-      AND ps.status NOT IN ('cancelled', 'draft')
+      AND ps.status NOT IN ('cancelled', 'draft', 'archived')
       AND re.is_reserve = 0
       AND re.notified_24h = 0
       AND datetime(ps.session_datetime) <= datetime('now', 'localtime', '+24 hours')
@@ -1245,7 +1285,7 @@ async function runCronTasks() {
     FROM roster_entries re
     JOIN pickle_sessions ps ON ps.id = re.session_id
     WHERE ps.roster_published = 1
-      AND ps.status NOT IN ('cancelled', 'draft')
+      AND ps.status NOT IN ('cancelled', 'draft', 'archived')
       AND re.is_reserve = 0
       AND re.notified_1h = 0
       AND datetime(ps.session_datetime) <= datetime('now', 'localtime', '+1 hour')
