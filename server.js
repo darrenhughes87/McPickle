@@ -600,12 +600,21 @@ app.get('/api/sessions', requireUser, (req, res) => {
   const isAdmin = req.adminSession;
   const userId = req.user?.id;
 
+  // Admins see everything (except cancelled/archived). Users have an extra
+  // filter: hide sessions whose session_datetime is more than 12h in the past
+  // — by the next morning the played session disappears from their dashboard.
+  const userTimeFilter = isAdmin
+    ? '1=1'
+    : `datetime(ps.session_datetime) > datetime('now', 'localtime', '-12 hours')`;
+
   const sessions = db.prepare(`
     SELECT ps.*,
       (SELECT COUNT(*) FROM responses r WHERE r.session_id = ps.id AND r.available = 1) AS available_count,
       (SELECT COUNT(*) FROM responses r WHERE r.session_id = ps.id) AS total_responses
     FROM pickle_sessions ps
-    WHERE ps.status NOT IN ('cancelled', 'archived') AND (ps.status != 'draft' OR ${isAdmin ? '1=1' : '1=0'})
+    WHERE ps.status NOT IN ('cancelled', 'archived')
+      AND (ps.status != 'draft' OR ${isAdmin ? '1=1' : '1=0'})
+      AND (${userTimeFilter})
     ORDER BY ps.session_datetime ASC
   `).all();
 
