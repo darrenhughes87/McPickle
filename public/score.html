@@ -795,11 +795,13 @@
       pushHistory();
 
       if (rallyWinner === game.serving_team) {
-        // Serving team scored
+        // Serving team scored — server stays the same player, they switch
+        // sides (visual only). Crucially, is_match_start stays true until
+        // the first serving team actually loses service: traditional rules
+        // say only ONE server on the first team gets a turn before side-out,
+        // no matter how many points they score.
         if (rallyWinner === 'A') game.score_a++;
         else game.score_b++;
-        // Server stays the same player — they switch sides (visual only)
-        game.is_match_start = false;
       } else {
         // Receiving team won the rally — server changes, no point added
         if (!game.is_doubles) {
