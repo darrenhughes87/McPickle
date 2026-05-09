@@ -842,11 +842,13 @@ app.post('/api/sessions/:id/respond', requireUser, (req, res) => {
 
   const { available, keenness } = req.body;
   if (available !== 0 && available !== 1) return res.status(400).json({ error: 'available must be 0 or 1' });
-  if (available === 1 && (keenness < 1 || keenness > 4)) {
-    return res.status(400).json({ error: 'keenness must be 1-4 when available' });
+  let k = null;
+  if (available === 1) {
+    k = parseInt(keenness);
+    if (!Number.isInteger(k) || k < 1 || k > 4) {
+      return res.status(400).json({ error: 'keenness must be 1-4 when available' });
+    }
   }
-
-  const k = available === 1 ? (parseInt(keenness) || null) : null;
   db.prepare(`
     INSERT INTO responses (session_id, user_id, available, keenness, submitted_at, updated_at)
     VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -1131,12 +1133,15 @@ app.post('/api/sessions/:id/results', requireAdmin, (req, res) => {
     const saveResults = db.transaction((sid, matchList) => {
       db.prepare('DELETE FROM match_results WHERE session_id = ?').run(sid);
       const insert = db.prepare(`
-        INSERT INTO match_results (session_id, match_index, team_a_ids, team_b_ids, team_a_score, team_b_score, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO match_results (session_id, match_index, team_a_ids, team_b_ids, team_a_score, team_b_score, notes, is_live)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       matchList.forEach((m, idx) => {
         if (!Array.isArray(m.team_a_ids) || !Array.isArray(m.team_b_ids)) {
           throw new Error('Each match must have team_a_ids and team_b_ids arrays');
+        }
+        if (!m.team_a_ids.length || !m.team_b_ids.length) {
+          throw new Error('Each team must have at least one player');
         }
         if (typeof m.team_a_score !== 'number' || typeof m.team_b_score !== 'number') {
           throw new Error('Each match must have numeric scores');
@@ -1146,7 +1151,8 @@ app.post('/api/sessions/:id/results', requireAdmin, (req, res) => {
           JSON.stringify(m.team_a_ids),
           JSON.stringify(m.team_b_ids),
           m.team_a_score, m.team_b_score,
-          m.notes || null
+          m.notes || null,
+          m.is_live ? 1 : 0       // preserve live-saved flag if the client passes it back
         );
         m.team_a_ids.forEach(uid => allInvolvedUserIds.add(uid));
         m.team_b_ids.forEach(uid => allInvolvedUserIds.add(uid));

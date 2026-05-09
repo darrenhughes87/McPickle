@@ -1287,7 +1287,8 @@
         team_a_ids: m.team_a_ids.filter(x => x),
         team_b_ids: m.team_b_ids.filter(x => x),
         team_a_score: m.team_a_score,
-        team_b_score: m.team_b_score
+        team_b_score: m.team_b_score,
+        is_live: m.is_live === true   // preserve flag for live-saved matches
       })).filter(m => m.team_a_ids.length && m.team_b_ids.length);
 
       try {
