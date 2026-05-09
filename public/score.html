@@ -178,23 +178,59 @@
     .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
     /* Coin flip */
-    .coin {
-      width: 130px; height: 130px;
+    .coin-stage {
+      width: 150px; height: 150px;
       margin: 1.5rem auto;
-      border-radius: 50%;
-      background: radial-gradient(circle at 30% 30%, #f5d76e 0%, #c9a227 70%, #8a6914 100%);
-      border: 5px solid #6a4f0e;
-      box-shadow: 0 6px 0 rgba(0,0,0,0.4), inset 0 -8px 16px rgba(0,0,0,0.3);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 4rem;
-      transition: transform 0.6s ease-out;
+      perspective: 800px;
     }
-    .coin.flipping { animation: coin-flip 1s ease-out; }
-    @keyframes coin-flip {
-      0%   { transform: rotateY(0deg)   scale(1); }
-      30%  { transform: rotateY(540deg) scale(1.15); }
-      70%  { transform: rotateY(900deg) scale(1.05); }
-      100% { transform: rotateY(1080deg) scale(1); }
+    .coin {
+      width: 100%; height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 1.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+      transform: rotateY(0deg);
+    }
+    .coin-face {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 5.5rem;
+      letter-spacing: 0;
+      line-height: 1;
+      color: #4a3a0e;
+      text-shadow: 2px 2px 0 rgba(0,0,0,0.18);
+      background:
+        radial-gradient(circle at 30% 28%, #ffe39a 0%, #f0c040 38%, #c9a227 75%, #8a6914 100%);
+      border: 4px solid #6a4f0e;
+      box-shadow:
+        0 8px 0 rgba(0,0,0,0.45),
+        inset 0 -10px 18px rgba(0,0,0,0.28),
+        inset 0 10px 18px rgba(255,255,255,0.35);
+    }
+    .coin-face.heads { transform: rotateY(0deg);   }
+    .coin-face.tails { transform: rotateY(180deg); }
+    /* Outer rim ridges (decorative) */
+    .coin-face::after {
+      content: '';
+      position: absolute;
+      inset: 6px;
+      border-radius: 50%;
+      border: 2px dashed rgba(74, 58, 14, 0.4);
+      pointer-events: none;
+    }
+    .coin.spinning {
+      animation: coin-bounce 1.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+    @keyframes coin-bounce {
+      0%   { transform: translateY(0) rotateY(var(--start-rot, 0deg)); }
+      50%  { transform: translateY(-30px); }
+      100% { transform: translateY(0) rotateY(var(--end-rot, 1080deg)); }
     }
     .flip-result {
       text-align: center;
@@ -426,7 +462,12 @@
       </div>
     </div>
 
-    <div class="coin" id="coin">🪙</div>
+    <div class="coin-stage">
+      <div class="coin" id="coin">
+        <div class="coin-face heads">A</div>
+        <div class="coin-face tails">B</div>
+      </div>
+    </div>
     <div class="flip-result" id="flip-result"></div>
 
     <div class="actions">
@@ -680,17 +721,30 @@
       showPanel('flip');
     }
 
+    let coinRotation = 0;
     document.getElementById('flip-btn').addEventListener('click', () => {
       const coin = document.getElementById('coin');
+      const flipBtn = document.getElementById('flip-btn');
       const result = Math.random() < 0.5 ? 'A' : 'B';
-      coin.classList.remove('flipping');
+      // 4-6 full rotations, ending on A (0deg) or B (180deg)
+      const turns = 4 + Math.floor(Math.random() * 3);
+      const finalRot = coinRotation + (turns * 360) + (result === 'A' ? 0 : 180);
+
+      coin.style.setProperty('--start-rot', `${coinRotation}deg`);
+      coin.style.setProperty('--end-rot', `${finalRot}deg`);
+      coin.classList.remove('spinning');
       void coin.offsetWidth; // restart animation
-      coin.classList.add('flipping');
+      coin.classList.add('spinning');
+      coin.style.transform = `rotateY(${finalRot}deg)`;
+      coinRotation = finalRot;
+
+      flipBtn.disabled = true;
       document.getElementById('flip-result').textContent = '';
       setTimeout(() => {
         setFirstServer(result);
         document.getElementById('flip-result').textContent = `Team ${result} serves first!`;
-      }, 1000);
+        flipBtn.disabled = false;
+      }, 1400);
     });
 
     function setFirstServer(side) {
