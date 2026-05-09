@@ -43,7 +43,7 @@
       border-bottom: 2px solid var(--black);
       padding-top: calc(0.6rem + env(safe-area-inset-top, 0px));
     }
-    .topbar .back-btn, .topbar .undo-btn {
+    .topbar .back-btn, .topbar .undo-btn, .topbar .voice-btn {
       background: transparent;
       color: var(--pickle-light);
       border: 1.5px solid var(--pickle-mid);
@@ -55,8 +55,9 @@
       letter-spacing: 1px;
       cursor: pointer;
     }
-    .topbar .back-btn:hover, .topbar .undo-btn:hover { background: var(--pickle-mid); color: var(--cream); }
+    .topbar .back-btn:hover, .topbar .undo-btn:hover, .topbar .voice-btn:hover { background: var(--pickle-mid); color: var(--cream); }
     .topbar .undo-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .topbar .voice-btn.on { color: var(--pickle-yellow); border-color: var(--pickle-yellow); }
     .topbar .title { flex: 1; text-align: center; font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; font-size: 1.1rem; }
 
     /* Setup screens */
@@ -416,6 +417,7 @@
   <div class="topbar">
     <button class="back-btn" id="back-btn">← Back</button>
     <div class="title" id="bar-title">Live Score</div>
+    <button class="voice-btn" id="voice-btn" title="Toggle voice announcements">🔇 Voice</button>
     <button class="undo-btn" id="undo-btn" style="display:none;">⟳ Undo</button>
   </div>
 
@@ -537,6 +539,87 @@
     let matchIndex = 1;            // sequence number for the topbar
 
     let wakeLock = null;
+
+    // ---- Voice announcements (Web Speech API, UK English) ----
+    let voiceEnabled = localStorage.getItem('mp_score_voice') === '1';
+    let ukVoice = null;
+
+    const NUM_WORDS = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty','twenty-one','twenty-two'];
+    function numWord(n) { return NUM_WORDS[n] || String(n); }
+
+    function loadVoices() {
+      if (!('speechSynthesis' in window)) return;
+      const voices = speechSynthesis.getVoices();
+      if (!voices.length) return;
+      ukVoice =
+        voices.find(v => v.lang === 'en-GB' && v.default) ||
+        voices.find(v => v.lang === 'en-GB') ||
+        voices.find(v => v.lang && v.lang.startsWith('en-GB')) ||
+        voices.find(v => v.lang && v.lang.startsWith('en')) ||
+        voices[0];
+    }
+    if ('speechSynthesis' in window) {
+      speechSynthesis.addEventListener('voiceschanged', loadVoices);
+      loadVoices();
+    }
+
+    function speak(text) {
+      if (!voiceEnabled) return;
+      if (!('speechSynthesis' in window)) return;
+      try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        if (ukVoice) u.voice = ukVoice;
+        u.lang = 'en-GB';
+        u.rate = 0.95;
+        u.pitch = 1;
+        speechSynthesis.speak(u);
+      } catch {}
+    }
+
+    function updateVoiceButton() {
+      const btn = document.getElementById('voice-btn');
+      btn.classList.toggle('on', voiceEnabled);
+      btn.textContent = voiceEnabled ? '🔊 Voice' : '🔇 Voice';
+    }
+    updateVoiceButton();
+
+    document.getElementById('voice-btn').addEventListener('click', () => {
+      voiceEnabled = !voiceEnabled;
+      localStorage.setItem('mp_score_voice', voiceEnabled ? '1' : '0');
+      updateVoiceButton();
+      if (voiceEnabled) speak('Voice on');
+    });
+
+    // Build the announcement after every state change.
+    // before = the snapshot BEFORE applyTap (or null at match start)
+    function announceCurrent(before) {
+      if (!voiceEnabled || !game) return;
+      const sScore = game.serving_team === 'A' ? game.score_a : game.score_b;
+      const rScore = game.serving_team === 'A' ? game.score_b : game.score_a;
+
+      // Server number to announce: convention says "0-0-2" at start of match
+      let serverCallNum;
+      if (game.is_match_start) serverCallNum = 2;
+      else if (game.is_doubles) serverCallNum = game.server_number;
+      else serverCallNum = null; // singles — no number
+
+      let text = `${numWord(sScore)}, ${numWord(rScore)}`;
+      if (serverCallNum !== null) text += `, ${numWord(serverCallNum)}`;
+
+      // Did the server (player) change since the previous state?
+      const serverChanged = !before
+        || before.serving_team !== game.serving_team
+        || before.server_slot !== game.server_slot;
+
+      if (serverChanged) {
+        const serverId = teams[game.serving_team][game.server_slot];
+        const serverName = userName(serverId);
+        text += `. ${serverName} to serve.`;
+      }
+
+      speak(text);
+    }
 
     // ---- Util ----
     let toastTimer;
@@ -761,6 +844,8 @@
       initGame();
       showPanel('board');
       requestWakeLock();
+      // First-serve announcement: "0, 0, 2, Darren to serve"
+      announceCurrent(null);
     });
 
     // ============================================================
@@ -792,6 +877,7 @@
 
     function applyTap(rallyWinner) {
       if (!game || game.is_complete) return;
+      const before = snapshot();
       pushHistory();
 
       if (rallyWinner === game.serving_team) {
@@ -823,16 +909,25 @@
       }
 
       // Check side-switch alert (first time either side hits 6)
+      let triggeredSwitch = false;
       if (!game.switch_acknowledged && (game.score_a >= SWITCH_AT || game.score_b >= SWITCH_AT)) {
-        // Show alert
         document.getElementById('switch-alert').classList.add('show');
-        game.switch_acknowledged = true; // even if user dismisses, don't re-fire
+        game.switch_acknowledged = true;
+        triggeredSwitch = true;
       }
 
-      // Check win
+      // Check win first — if game's over, announce win instead of score
       checkWin();
       saveLocal();
       renderBoard();
+
+      // Voice: announce score, then optionally side-switch (after a beat)
+      if (!game.is_complete) {
+        announceCurrent(before);
+        if (triggeredSwitch) {
+          setTimeout(() => speak('Switch ends.'), 1600);
+        }
+      }
     }
 
     function checkWin() {
@@ -887,6 +982,8 @@
 
     document.getElementById('undo-btn').addEventListener('click', () => {
       if (!history.length) return;
+      // Cancel any in-flight announcement so undo doesn't speak a stale call
+      try { speechSynthesis.cancel(); } catch {}
       game = history.pop();
       saveLocal();
       renderBoard();
@@ -904,6 +1001,11 @@
       document.getElementById('overlay').classList.add('show');
       const undo = document.getElementById('undo-btn');
       undo.disabled = true;
+      // Voice: "Game! Anna and Joe won eleven, nine"
+      const winningScore = winner === 'A' ? game.score_a : game.score_b;
+      const losingScore  = winner === 'A' ? game.score_b : game.score_a;
+      const joinedNames = teams[winner].map(uid => userName(uid)).join(' and ');
+      speak(`Game! ${joinedNames} won, ${numWord(winningScore)}, ${numWord(losingScore)}.`);
     }
 
     function hideWinOverlay() {
