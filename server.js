@@ -1409,7 +1409,14 @@ app.post('/api/live/sync/listen', requireAdmin, (req, res) => {
 });
 
 app.post('/api/live/sync/cancel', requireAdmin, (req, res) => {
-  syncListening.delete(adminToken(req));
+  // Cancel only clears the pending "listening for next press" slot —
+  // it does NOT wipe already-bound device assignments.
+  // Use /sync/reset to forget all bindings.
+  const tok = adminToken(req);
+  const s = syncListening.get(tok) || {};
+  s.slot = null;
+  syncListening.set(tok, s);
+  ssePush(syncSseClients, tok, 'sync_state', { slot: null, a_device: s.a_device || null, b_device: s.b_device || null });
   res.json({ ok: true });
 });
 
