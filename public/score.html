@@ -948,14 +948,28 @@
         pipFlash();
         renderBoard(after);
 
-        // Voice + visual feedback (only if there's a meaningful change)
+        // Voice + visual feedback
+        // The server tags every press-driven state event with _scored_team
+        // (the team that won the rally — regardless of whether their score
+        // actually went up, which it doesn't when the receiving team wins).
+        // _undone is set when the previous event was rolled back.
         if (before) {
           const aDelta = after.score_a - (before.score_a || 0);
           const bDelta = after.score_b - (before.score_b || 0);
-          if (aDelta > 0) { flashWinner('A'); dingPoint(); announceFromTransition(before, after); }
-          else if (bDelta > 0) { flashWinner('B'); dingPoint(); announceFromTransition(before, after); }
-          else if (aDelta < 0 || bDelta < 0 || after._undone) { flashUndo(aDelta < 0 ? 'A' : 'B'); dingUndo(); announceFromTransition(before, after); }
-          else { announceFromTransition(before, after); }
+
+          if (after._undone) {
+            const decTeam = aDelta < 0 ? 'A' : bDelta < 0 ? 'B' : null;
+            flashUndo(decTeam);
+            dingUndo();
+          } else if (after._scored_team === 'A' || after._scored_team === 'B') {
+            // A rally was won by this team. Always flash + ding, even when
+            // their score didn't increment (receiving-team rally win → server
+            // flip / side-out, no score change but still a registered press).
+            flashWinner(after._scored_team);
+            dingPoint();
+          }
+
+          announceFromTransition(before, after);
         } else {
           announceFromTransition(null, after);
         }
