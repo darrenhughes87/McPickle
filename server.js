@@ -1474,6 +1474,11 @@ app.post('/api/live/match/start', requireAdmin, (req, res) => {
 
   const is_doubles = team_a_ids.length === 2 && team_b_ids.length === 2 ? 1 : 0;
 
+  // Defensive: discard any abandoned in-progress match for the same session.
+  // (Normal flow always saves or discards via the win overlay, but if a user
+  //  bailed out via the back button mid-game, the row would otherwise linger.)
+  db.prepare(`UPDATE live_matches SET is_complete = 1 WHERE session_id = ? AND is_complete = 0`).run(session_id);
+
   // What match number is this in the session? Just for label.
   const prior = db.prepare('SELECT COUNT(*) AS c FROM live_matches WHERE session_id = ?').get(session_id).c;
   const matchLabel = prior + 1;
@@ -1852,6 +1857,14 @@ cron.schedule('* * * * *', () => { runCronTasks().catch(console.error); }, { tim
 cron.schedule('0 3 * * *', () => {
   const result = db.prepare(`DELETE FROM auth_sessions WHERE expires_at < datetime('now')`).run();
   if (result.changes > 0) console.log(`[cron] Cleaned up ${result.changes} expired session(s)`);
+
+  // Also drop in-memory syncListening entries for tokens that no longer exist
+  const validTokens = new Set(db.prepare('SELECT token FROM auth_sessions').all().map(r => r.token));
+  let dropped = 0;
+  for (const tok of syncListening.keys()) {
+    if (!validTokens.has(tok)) { syncListening.delete(tok); dropped++; }
+  }
+  if (dropped > 0) console.log(`[cron] Dropped ${dropped} orphaned syncListening entries`);
 }, { timezone: 'Europe/London' });
 
 app.listen(PORT, () => console.log(`McPICKLES running on port ${PORT} (${IS_PROD ? 'production' : 'development'})`));
