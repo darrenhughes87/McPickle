@@ -17,6 +17,9 @@
       --black:         #1A1A1A;
       --cream:         #F5F0E8;
       --red:           #C0392B;
+      --amber:         #D4881A;
+      --teamA:         #2D5038;     /* pickle green */
+      --teamB:         #6e5a2a;     /* mustard */
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
     html, body {
@@ -32,7 +35,9 @@
       flex-direction: column;
     }
 
-    /* Top bar */
+    /* ────────────────────────────────────────────────────────────
+       TOP BAR
+       ────────────────────────────────────────────────────────── */
     .topbar {
       flex: 0 0 auto;
       display: flex;
@@ -42,13 +47,14 @@
       background: var(--pickle-dark);
       border-bottom: 2px solid var(--black);
       padding-top: calc(0.6rem + env(safe-area-inset-top, 0px));
+      position: relative;
     }
     .topbar .back-btn, .topbar .undo-btn, .topbar .voice-btn {
       background: transparent;
       color: var(--pickle-light);
       border: 1.5px solid var(--pickle-mid);
       border-radius: 4px;
-      padding: 0.35rem 0.7rem;
+      padding: 0.4rem 0.7rem;
       font-family: 'Oswald', sans-serif;
       font-size: 0.78rem;
       font-weight: 600;
@@ -58,9 +64,34 @@
     .topbar .back-btn:hover, .topbar .undo-btn:hover, .topbar .voice-btn:hover { background: var(--pickle-mid); color: var(--cream); }
     .topbar .undo-btn:disabled { opacity: 0.3; cursor: not-allowed; }
     .topbar .voice-btn.on { color: var(--pickle-yellow); border-color: var(--pickle-yellow); }
-    .topbar .title { flex: 1; text-align: center; font-family: 'Bebas Neue', sans-serif; letter-spacing: 2px; font-size: 1.1rem; }
+    .topbar .title {
+      flex: 1; text-align: center;
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 2px; font-size: 1.1rem;
+      display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    }
 
-    /* Setup screens */
+    /* Sync health pip */
+    .pip {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: #2E7D32;
+      box-shadow: 0 0 0 0 rgba(46, 125, 50, 0.0);
+      transition: background 0.3s, box-shadow 0.3s;
+      flex-shrink: 0;
+    }
+    .pip.flash { animation: pip-flash 350ms ease-out; }
+    .pip.amber { background: var(--amber); }
+    .pip.red   { background: var(--red); }
+    @keyframes pip-flash {
+      0%   { box-shadow: 0 0 0 0 rgba(141, 184, 123, 0.7); transform: scale(1); }
+      50%  { box-shadow: 0 0 0 10px rgba(141, 184, 123, 0); transform: scale(1.6); }
+      100% { box-shadow: 0 0 0 0 rgba(141, 184, 123, 0); transform: scale(1); }
+    }
+
+    /* ────────────────────────────────────────────────────────────
+       PANEL CONTAINER (setup + scoreboard)
+       ────────────────────────────────────────────────────────── */
     .panel {
       flex: 1;
       display: none;
@@ -73,14 +104,16 @@
     .panel.active { display: flex; }
     .panel h2 {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 1.6rem;
+      font-size: clamp(1.4rem, 4vmin, 2.2rem);
       letter-spacing: 2px;
       color: var(--pickle-light);
       margin-bottom: 0.5rem;
     }
-    .panel .help { font-size: 0.85rem; color: #888; margin-bottom: 1rem; }
+    .panel .help { font-size: clamp(0.85rem, 1.8vmin, 1.05rem); color: #888; margin-bottom: 1rem; }
 
-    /* Roster pool */
+    /* ────────────────────────────────────────────────────────────
+       ROSTER + TEAM PICKER
+       ────────────────────────────────────────────────────────── */
     .roster-pool {
       display: flex;
       flex-wrap: wrap;
@@ -95,12 +128,12 @@
       display: inline-flex;
       align-items: center;
       gap: 0.4rem;
-      padding: 0.5rem 0.85rem;
+      padding: clamp(0.4rem, 1.2vmin, 0.7rem) clamp(0.7rem, 2vmin, 1.1rem);
       background: var(--cream);
       color: var(--black);
       border: 2px solid var(--black);
       border-radius: 22px;
-      font-size: 0.92rem;
+      font-size: clamp(0.85rem, 1.8vmin, 1.05rem);
       font-weight: 600;
       cursor: pointer;
       transition: transform 0.1s, box-shadow 0.1s;
@@ -112,7 +145,6 @@
     }
     .player-chip .av { font-size: 1.1rem; }
 
-    /* Team boxes */
     .team-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -137,7 +169,7 @@
     .team-label {
       font-family: 'Bebas Neue', sans-serif;
       letter-spacing: 1.5px;
-      font-size: 1rem;
+      font-size: clamp(0.95rem, 2vmin, 1.2rem);
       color: var(--pickle-light);
       text-align: center;
       margin-bottom: 0.25rem;
@@ -150,19 +182,27 @@
     }
     .team-box .player-chip { background: var(--pickle-light); }
 
-    .vs-divider {
-      text-align: center;
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 1.4rem;
-      letter-spacing: 2px;
-      color: #555;
-      margin: 0.5rem 0;
+    /* Sync Flic chip on team-picker */
+    .sync-chip {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.6rem 0.85rem;
+      background: rgba(212, 180, 74, 0.08);
+      border: 1.5px dashed var(--pickle-yellow);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: var(--pickle-yellow);
     }
+    .sync-chip:hover { background: rgba(212, 180, 74, 0.15); }
+    .sync-chip.synced { border-style: solid; background: rgba(46, 125, 50, 0.12); color: var(--pickle-light); border-color: var(--pickle-mid); }
+    .sync-chip .summary { flex: 1; line-height: 1.3; }
 
-    /* Buttons */
+    /* ────────────────────────────────────────────────────────────
+       STICKY BOTTOM ACTIONS (across all setup screens)
+       ────────────────────────────────────────────────────────── */
     .actions {
-      margin-top: auto;       /* push to bottom when content is short */
-      position: sticky;       /* and keep it visible when content is long */
+      margin-top: auto;
+      position: sticky;
       bottom: 0;
       background: var(--black);
       margin-left: -1.25rem;
@@ -177,7 +217,7 @@
     .btn {
       padding: 0.85rem;
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 1.2rem;
+      font-size: clamp(1rem, 2.5vmin, 1.4rem);
       letter-spacing: 2px;
       border: 2px solid var(--black);
       border-radius: 6px;
@@ -192,9 +232,12 @@
     .btn-ghost    { background: transparent; color: #aaa; border-color: #444; }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
-    /* Coin flip */
+    /* ────────────────────────────────────────────────────────────
+       COIN FLIP
+       ────────────────────────────────────────────────────────── */
     .coin-stage {
-      width: 150px; height: 150px;
+      width: clamp(110px, 25vmin, 200px);
+      height: clamp(110px, 25vmin, 200px);
       margin: 1.5rem auto;
       perspective: 800px;
     }
@@ -206,35 +249,25 @@
       transform: rotateY(0deg);
     }
     .coin-face {
-      position: absolute;
-      inset: 0;
+      position: absolute; inset: 0;
       border-radius: 50%;
       backface-visibility: hidden;
       -webkit-backface-visibility: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 5.5rem;
-      letter-spacing: 0;
+      font-size: clamp(3.5rem, 12vmin, 7rem);
       line-height: 1;
       color: #4a3a0e;
       text-shadow: 2px 2px 0 rgba(0,0,0,0.18);
-      background:
-        radial-gradient(circle at 30% 28%, #ffe39a 0%, #f0c040 38%, #c9a227 75%, #8a6914 100%);
+      background: radial-gradient(circle at 30% 28%, #ffe39a 0%, #f0c040 38%, #c9a227 75%, #8a6914 100%);
       border: 4px solid #6a4f0e;
-      box-shadow:
-        0 8px 0 rgba(0,0,0,0.45),
-        inset 0 -10px 18px rgba(0,0,0,0.28),
-        inset 0 10px 18px rgba(255,255,255,0.35);
+      box-shadow: 0 8px 0 rgba(0,0,0,0.45), inset 0 -10px 18px rgba(0,0,0,0.28), inset 0 10px 18px rgba(255,255,255,0.35);
     }
-    .coin-face.heads { transform: rotateY(0deg);   }
+    .coin-face.heads { transform: rotateY(0deg); }
     .coin-face.tails { transform: rotateY(180deg); }
-    /* Outer rim ridges (decorative) */
     .coin-face::after {
       content: '';
-      position: absolute;
-      inset: 6px;
+      position: absolute; inset: 6px;
       border-radius: 50%;
       border: 2px dashed rgba(74, 58, 14, 0.4);
       pointer-events: none;
@@ -250,19 +283,23 @@
     .flip-result {
       text-align: center;
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 1.4rem;
+      font-size: clamp(1.2rem, 3vmin, 1.8rem);
       letter-spacing: 2px;
       color: var(--pickle-yellow);
       margin: 1rem 0;
       min-height: 1.6rem;
     }
 
-    /* Scoreboard */
-    .board-panel { padding: 0; }
+    /* ────────────────────────────────────────────────────────────
+       SCOREBOARD
+       ────────────────────────────────────────────────────────── */
+    .board-panel { padding: 0; overflow: hidden; }
     .board {
       flex: 1;
       display: flex;
       flex-direction: column;
+      position: relative;
+      min-height: 0;
     }
     .board-half {
       flex: 1 1 50%;
@@ -273,23 +310,22 @@
       justify-content: center;
       padding: 0.5rem;
       cursor: pointer;
-      transition: background 0.15s;
+      transition: background 0.15s, filter 0.15s;
       overflow: hidden;
     }
     .board-half:active { filter: brightness(1.15); }
     .board-half.team-a {
-      background: linear-gradient(180deg, #1f4d3a 0%, #2D5038 100%);
+      background: linear-gradient(180deg, #1f4d3a 0%, var(--teamA) 100%);
       color: var(--cream);
     }
     .board-half.team-b {
-      background: linear-gradient(0deg, #4a3b1a 0%, #6e5a2a 100%);
+      background: linear-gradient(0deg, #4a3b1a 0%, var(--teamB) 100%);
       color: var(--cream);
     }
     .board-half.serving::before {
       content: '🏐 SERVING';
       position: absolute;
-      top: 0.6rem;
-      left: 0.85rem;
+      top: 0.6rem; left: 0.85rem;
       font-family: 'Bebas Neue', sans-serif;
       letter-spacing: 1.5px;
       font-size: 0.78rem;
@@ -300,24 +336,55 @@
     }
     .board-half.winner { background: linear-gradient(180deg, #1a5c1e 0%, #2E7D32 100%); }
 
+    /* Flash + pulse animations */
+    .board-half.flashing {
+      animation: half-flash 350ms ease-out;
+    }
+    @keyframes half-flash {
+      0%   { filter: brightness(1); }
+      15%  { filter: brightness(2.4); }
+      100% { filter: brightness(1); }
+    }
+    .board-half .score-num {
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: -3px;
+      line-height: 0.85;
+      text-shadow: 4px 4px 0 rgba(0,0,0,0.45);
+      transition: transform 0.1s;
+      /* Scales with viewport — 25vmin gives a sensible default but caps at 28rem */
+      font-size: clamp(7rem, 25vmin, 28rem);
+    }
+    .board-half .score-num.pulse {
+      animation: score-pulse 450ms ease-out;
+    }
+    @keyframes score-pulse {
+      0%   { transform: scale(1); }
+      30%  { transform: scale(1.18); }
+      100% { transform: scale(1); }
+    }
+    .board-half .score-num.shake {
+      animation: score-shake 400ms ease-out;
+    }
+    @keyframes score-shake {
+      0%, 100% { transform: translateY(0) scale(1); }
+      25% { transform: translateY(8px) scale(0.9); }
+      75% { transform: translateY(-3px) scale(0.95); }
+    }
+
     .board-half .team-names {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 1.15rem;
+      font-size: clamp(0.95rem, 2.5vmin, 2rem);
       letter-spacing: 1.5px;
       text-align: center;
       margin-bottom: 0.5rem;
       opacity: 0.9;
+      max-width: 95%;
+      overflow-wrap: anywhere;
     }
     .board-half .team-names .pname { display: inline-flex; align-items: center; gap: 0.25rem; margin: 0 0.3rem; }
     .board-half .team-names .pname.serving { color: var(--pickle-yellow); }
-    .board-half .score {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 12rem;
-      letter-spacing: -3px;
-      line-height: 0.85;
-      text-shadow: 4px 4px 0 rgba(0,0,0,0.45);
-    }
 
+    /* Score-call strip — between halves in portrait, banner in landscape */
     .board-strip {
       flex: 0 0 auto;
       background: var(--black);
@@ -327,20 +394,62 @@
       border-bottom: 2px solid #3a3a3a;
       font-family: 'Bebas Neue', sans-serif;
       letter-spacing: 2px;
+      z-index: 5;
     }
     .board-strip .call {
-      font-size: 1.6rem;
+      font-size: clamp(1.4rem, 4vmin, 3rem);
       color: var(--pickle-yellow);
       line-height: 1;
     }
     .board-strip .who-serves {
-      font-size: 0.85rem;
+      font-size: clamp(0.78rem, 1.8vmin, 1.3rem);
       color: var(--pickle-light);
       letter-spacing: 1px;
       margin-top: 0.2rem;
     }
 
-    /* Game-won overlay */
+    /* Both-halves dim on undo */
+    .board.undo-dim { animation: undo-dim 350ms ease-out; }
+    @keyframes undo-dim {
+      0%, 100% { filter: brightness(1); }
+      40%      { filter: brightness(0.55); }
+    }
+
+    /* ─── Landscape layout ─── */
+    @media (orientation: landscape) {
+      .board { flex-direction: row; }
+      .board-half { flex: 1 1 50%; }
+      .board-strip {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        border-top: none;
+        background: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+      }
+      .board-half.serving::before {
+        top: auto;
+        bottom: 0.6rem;
+        left: 0.85rem;
+      }
+    }
+
+    /* Big-iPad / tablet landscape: enormous score */
+    @media (orientation: landscape) and (min-width: 900px) {
+      .board-half .score-num { font-size: clamp(15rem, 32vmin, 36rem); }
+      .board-strip .call { font-size: clamp(2.5rem, 5vmin, 4rem); }
+      .board-strip .who-serves { font-size: clamp(1.1rem, 2.2vmin, 1.8rem); }
+      .board-half .team-names { font-size: clamp(1.4rem, 3vmin, 2.4rem); }
+    }
+    /* iPad portrait: also big */
+    @media (orientation: portrait) and (min-width: 720px) {
+      .board-half .score-num { font-size: clamp(15rem, 28vmin, 30rem); }
+      .board-strip .call { font-size: clamp(2.2rem, 5vmin, 3.5rem); }
+    }
+
+    /* ────────────────────────────────────────────────────────────
+       OVERLAYS — switch ends, game over, sync flic
+       ────────────────────────────────────────────────────────── */
     .overlay {
       display: none;
       position: fixed; inset: 0;
@@ -356,26 +465,25 @@
       border: 3px solid var(--pickle-yellow);
       border-radius: 12px;
       padding: 1.5rem 1.25rem;
-      max-width: 400px;
+      max-width: 460px;
       width: 100%;
+      max-height: calc(100dvh - 2rem);
+      overflow-y: auto;
       text-align: center;
     }
-    .overlay h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.8rem; letter-spacing: 2px; color: var(--pickle-yellow); }
-    .overlay .winner-line {
-      font-size: 1rem;
-      color: var(--cream);
-      margin: 0.5rem 0 0.25rem;
-    }
+    .overlay h3 { font-family: 'Bebas Neue', sans-serif; font-size: clamp(1.5rem, 4vmin, 2.4rem); letter-spacing: 2px; color: var(--pickle-yellow); }
+    .overlay p { font-size: clamp(0.85rem, 2vmin, 1.1rem); margin: 0.5rem 0; }
+    .overlay .winner-line { color: var(--cream); margin: 0.5rem 0 0.25rem; }
     .overlay .final {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 3.5rem;
+      font-size: clamp(3rem, 9vmin, 5rem);
       letter-spacing: 2px;
       color: var(--pickle-light);
       margin: 0.5rem 0 1rem;
     }
     .overlay .modal-btns { display: flex; flex-direction: column; gap: 0.5rem; }
 
-    /* Side switch alert */
+    /* Side-switch alert (less obtrusive, dismissible) */
     .switch-alert {
       position: fixed;
       top: 50%; left: 50%;
@@ -386,18 +494,18 @@
       border-radius: 8px;
       padding: 1rem 1.5rem;
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 1.4rem;
+      font-size: clamp(1.2rem, 3.5vmin, 2rem);
       letter-spacing: 2px;
       text-align: center;
       z-index: 90;
       display: none;
       box-shadow: 6px 6px 0 rgba(0,0,0,0.5);
+      max-width: 90vw;
     }
     .switch-alert.show { display: block; animation: pop-in 0.25s ease-out; }
     @keyframes pop-in { from { transform: translate(-50%, -50%) scale(0.7); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
     .switch-alert button {
-      display: block;
-      width: 100%;
+      display: block; width: 100%;
       margin-top: 0.75rem;
       padding: 0.5rem;
       background: var(--black);
@@ -408,6 +516,42 @@
       font-size: 1.1rem;
       letter-spacing: 1.5px;
       cursor: pointer;
+    }
+
+    /* Sync Flic modal — list of teams to bind */
+    .sync-modal .team-line {
+      display: flex; align-items: center;
+      padding: 0.85rem 0.85rem;
+      margin: 0.5rem 0;
+      background: rgba(0,0,0,0.2);
+      border: 1.5px solid #444;
+      border-radius: 6px;
+      gap: 0.7rem;
+      text-align: left;
+    }
+    .sync-modal .team-line.listening {
+      border-color: var(--pickle-yellow);
+      animation: listening-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes listening-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(212, 180, 74, 0.4); }
+      50%      { box-shadow: 0 0 0 6px rgba(212, 180, 74, 0); }
+    }
+    .sync-modal .team-line.synced { border-color: var(--pickle-mid); border-style: solid; background: rgba(46,125,50,0.12); }
+    .sync-modal .team-line .label { flex: 1; font-weight: 600; }
+    .sync-modal .team-line .status { font-size: 0.78rem; color: #aaa; }
+    .sync-modal .team-line.synced .status { color: var(--pickle-light); }
+    .sync-modal .team-line.listening .status { color: var(--pickle-yellow); }
+    .sync-modal button.bind-btn {
+      background: var(--pickle-yellow); color: var(--black);
+      border: 2px solid var(--black); border-radius: 4px;
+      font-family: 'Bebas Neue', sans-serif; font-size: 0.9rem;
+      letter-spacing: 1px; padding: 0.4rem 0.7rem; cursor: pointer;
+    }
+    .sync-modal button.bind-btn[disabled] { opacity: 0.5; cursor: default; }
+    .sync-modal .helper {
+      font-size: 0.78rem; color: #888; margin: 0.5rem 0;
+      text-align: left;
     }
 
     /* Loading */
@@ -421,16 +565,26 @@
       border-radius: 6px; padding: 0.55rem 1.1rem;
       font-size: 0.85rem; font-weight: 600;
       opacity: 0; transition: opacity 0.3s;
-      pointer-events: none; z-index: 999; white-space: nowrap;
+      pointer-events: none; z-index: 999;
+      max-width: 90vw;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     #toast.show { opacity: 1; }
     #toast.error { background: #5c1a1a; border-color: var(--red); }
+
+    /* No selection on body */
+    .panel.board-panel.active { display: flex; }
   </style>
 </head>
 <body>
   <div class="topbar">
     <button class="back-btn" id="back-btn">← Back</button>
-    <div class="title" id="bar-title">Live Score</div>
+    <div class="title" id="bar-title">
+      <span id="bar-title-text">Live Score</span>
+      <span class="pip" id="sync-pip" title="Sync health"></span>
+    </div>
     <button class="voice-btn" id="voice-btn" title="Toggle voice announcements">🔇 Voice</button>
     <button class="undo-btn" id="undo-btn" style="display:none;">⟳ Undo</button>
   </div>
@@ -455,6 +609,12 @@
     </div>
 
     <div style="font-size:0.85rem;color:#888;margin-top:0.75rem;text-align:center;" id="mode-label">Pick at least one player per side</div>
+
+    <div class="sync-chip" id="sync-chip" style="margin-top:1rem;display:none;" onclick="openSyncModal()">
+      <span style="font-size:1.2rem;">🔘</span>
+      <span class="summary" id="sync-chip-summary">Use Flic buttons (optional)</span>
+      <span style="font-size:0.8rem;">→</span>
+    </div>
 
     <div class="actions">
       <button class="btn btn-yellow" id="random-btn">🎲 Random teams</button>
@@ -494,18 +654,18 @@
 
   <!-- STEP 3: Scoreboard -->
   <div class="panel board-panel" id="panel-board">
-    <div class="board">
+    <div class="board" id="board">
       <div class="board-half team-a" id="board-a">
         <div class="team-names" id="board-a-names"></div>
-        <div class="score" id="board-a-score">0</div>
+        <div class="score-num" id="board-a-score">0</div>
       </div>
       <div class="board-strip">
-        <div class="call" id="board-call">0–0–start</div>
+        <div class="call" id="board-call">0 – 0 – start</div>
         <div class="who-serves" id="board-who-serves"></div>
       </div>
       <div class="board-half team-b" id="board-b">
         <div class="team-names" id="board-b-names"></div>
-        <div class="score" id="board-b-score">0</div>
+        <div class="score-num" id="board-b-score">0</div>
       </div>
     </div>
   </div>
@@ -531,33 +691,70 @@
     </div>
   </div>
 
+  <!-- Sync Flic modal -->
+  <div class="overlay sync-modal" id="sync-overlay">
+    <div class="card">
+      <h3>🔘 Sync Flic buttons</h3>
+      <p style="color:#aaa;margin-bottom:0.5rem;">Tap a "Bind" button below, then press the Flic you want assigned to that team.</p>
+
+      <div class="team-line" id="sync-line-A">
+        <div class="label" id="sync-A-label">Team A</div>
+        <div class="status" id="sync-A-status">not bound</div>
+        <button class="bind-btn" onclick="startBind('A')">Bind</button>
+      </div>
+      <div class="team-line" id="sync-line-B">
+        <div class="label" id="sync-B-label">Team B</div>
+        <div class="status" id="sync-B-status">not bound</div>
+        <button class="bind-btn" onclick="startBind('B')">Bind</button>
+      </div>
+
+      <div class="helper" id="sync-helper">
+        Bindings are per-match. Skip this for phone-only play.
+      </div>
+
+      <div class="modal-btns">
+        <button class="btn btn-ghost" onclick="resetSync()">Clear all</button>
+        <button class="btn btn-primary" onclick="closeSyncModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
 
   <script>
-    // ---- Config ----
+    // ============================================================
+    // CONFIG
+    // ============================================================
     const params = new URLSearchParams(location.search);
     const SESSION_ID = parseInt(params.get('session') || '0');
     const STORAGE_KEY = `mp_score_${SESSION_ID}`;
     const GAME_TO = 11;
     const SWITCH_AT = 6;
 
-    // ---- State ----
+    // ============================================================
+    // CLIENT STATE
+    // ============================================================
     let session = null;
-    let roster = [];               // [{id, display_name, avatar}]
-    let selectedChip = null;       // currently-armed chip in pick-teams
-    let teams = { A: [], B: [] };  // arrays of user_id
-    let firstServer = null;        // 'A' | 'B' | null
+    let roster = [];                 // [{id, display_name, avatar}]
+    let selectedChip = null;
+    let teams = { A: [], B: [] };
+    let firstServer = null;
 
-    let game = null;               // live game state — see initGame()
-    let history = [];              // stack of game snapshots for undo
-    let matchIndex = 1;            // sequence number for the topbar
+    let serverState = null;          // latest live_match snapshot (server is the source of truth)
+    let lastState = null;            // previous snapshot for diffing
+    let matchSse = null;             // EventSource for match channel
+    let syncSse = null;              // EventSource for sync channel
+    let syncFlicState = { a_device: null, b_device: null };  // local mirror of pending sync bindings
+    let lastEventAt = Date.now();
+    let stalenessCheckTimer = null;
 
     let wakeLock = null;
 
-    // ---- Voice announcements (Web Speech API, UK English) ----
+    // ============================================================
+    // VOICE (UK English)
+    // ============================================================
     let voiceEnabled = localStorage.getItem('mp_score_voice') === '1';
     let ukVoice = null;
-
     const NUM_WORDS = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty','twenty-one','twenty-two'];
     function numWord(n) { return NUM_WORDS[n] || String(n); }
 
@@ -576,28 +773,22 @@
       speechSynthesis.addEventListener('voiceschanged', loadVoices);
       loadVoices();
     }
-
     function speak(text) {
-      if (!voiceEnabled) return;
-      if (!('speechSynthesis' in window)) return;
+      if (!voiceEnabled || !('speechSynthesis' in window)) return;
       try {
         speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
         if (ukVoice) u.voice = ukVoice;
-        u.lang = 'en-GB';
-        u.rate = 0.95;
-        u.pitch = 1;
+        u.lang = 'en-GB'; u.rate = 0.95; u.pitch = 1;
         speechSynthesis.speak(u);
       } catch {}
     }
-
     function updateVoiceButton() {
       const btn = document.getElementById('voice-btn');
       btn.classList.toggle('on', voiceEnabled);
       btn.textContent = voiceEnabled ? '🔊 Voice' : '🔇 Voice';
     }
     updateVoiceButton();
-
     document.getElementById('voice-btn').addEventListener('click', () => {
       voiceEnabled = !voiceEnabled;
       localStorage.setItem('mp_score_voice', voiceEnabled ? '1' : '0');
@@ -605,37 +796,111 @@
       if (voiceEnabled) speak('Voice on');
     });
 
-    // Build the announcement after every state change.
-    // before = the snapshot BEFORE applyTap (or null at match start)
-    function announceCurrent(before) {
-      if (!voiceEnabled || !game) return;
-      const sScore = game.serving_team === 'A' ? game.score_a : game.score_b;
-      const rScore = game.serving_team === 'A' ? game.score_b : game.score_a;
-
-      // Server number to announce: convention says "0-0-2" at start of match
+    // Build the announcement after a state change
+    function announceFromTransition(before, after) {
+      if (!after || after.is_complete) return;
+      const sScore = after.serving_team === 'A' ? after.score_a : after.score_b;
+      const rScore = after.serving_team === 'A' ? after.score_b : after.score_a;
       let serverCallNum;
-      if (game.is_match_start) serverCallNum = 2;
-      else if (game.is_doubles) serverCallNum = game.server_number;
-      else serverCallNum = null; // singles — no number
+      if (after.is_match_start) serverCallNum = 2;
+      else if (after.is_doubles) serverCallNum = after.server_number;
+      else serverCallNum = null;
 
       let text = `${numWord(sScore)}, ${numWord(rScore)}`;
       if (serverCallNum !== null) text += `, ${numWord(serverCallNum)}`;
 
-      // Did the server (player) change since the previous state?
       const serverChanged = !before
-        || before.serving_team !== game.serving_team
-        || before.server_slot !== game.server_slot;
+        || before.serving_team !== after.serving_team
+        || before.server_slot !== after.server_slot
+        || before.is_match_start !== after.is_match_start;
 
       if (serverChanged) {
-        const serverId = teams[game.serving_team][game.server_slot];
-        const serverName = userName(serverId);
-        text += `. ${serverName} to serve.`;
+        const sid = after.serving_team === 'A' ? after.team_a_ids[after.server_slot] : after.team_b_ids[after.server_slot];
+        text += `. ${userName(sid)} to serve.`;
       }
-
       speak(text);
     }
 
-    // ---- Util ----
+    function speakWinner(after) {
+      const winner = after.score_a > after.score_b ? 'A' : 'B';
+      const ids = winner === 'A' ? after.team_a_ids : after.team_b_ids;
+      const names = ids.map(uid => userName(uid)).join(' and ');
+      const win = winner === 'A' ? after.score_a : after.score_b;
+      const lose = winner === 'A' ? after.score_b : after.score_a;
+      speak(`Game! ${names} won, ${numWord(win)}, ${numWord(lose)}.`);
+    }
+
+    // ============================================================
+    // AUDIO CUES (Web Audio API — no files needed)
+    // ============================================================
+    let audioCtx = null;
+    function ac() {
+      if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; }
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+    function tone(freq, durMs, type = 'sine', vol = 0.15) {
+      const ctx = ac(); if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.value = vol;
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durMs / 1000);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + durMs / 1000);
+    }
+    function dingPoint()  { tone(880, 110, 'sine', 0.16); }
+    function dingUndo()   { tone(220, 160, 'square', 0.10); }
+
+    // ============================================================
+    // VISUAL FEEDBACK
+    // ============================================================
+    function flashWinner(team) {
+      const el = document.getElementById(`board-${team.toLowerCase()}`);
+      const score = document.getElementById(`board-${team.toLowerCase()}-score`);
+      if (!el) return;
+      el.classList.remove('flashing'); void el.offsetWidth; el.classList.add('flashing');
+      if (score) {
+        score.classList.remove('pulse'); void score.offsetWidth; score.classList.add('pulse');
+      }
+    }
+    function flashUndo(decTeam) {
+      const board = document.getElementById('board');
+      board.classList.remove('undo-dim'); void board.offsetWidth; board.classList.add('undo-dim');
+      if (decTeam) {
+        const s = document.getElementById(`board-${decTeam.toLowerCase()}-score`);
+        if (s) { s.classList.remove('shake'); void s.offsetWidth; s.classList.add('shake'); }
+      }
+    }
+
+    // ============================================================
+    // SYNC PIP (connection health)
+    // ============================================================
+    function pipFlash() {
+      const pip = document.getElementById('sync-pip');
+      pip.classList.remove('flash'); void pip.offsetWidth; pip.classList.add('flash');
+      lastEventAt = Date.now();
+      pip.classList.remove('amber', 'red');
+    }
+    function pipAmber() { document.getElementById('sync-pip').classList.add('amber'); }
+    function pipRed()   { document.getElementById('sync-pip').classList.add('red'); }
+    function startStalenessCheck() {
+      if (stalenessCheckTimer) clearInterval(stalenessCheckTimer);
+      stalenessCheckTimer = setInterval(() => {
+        const age = (Date.now() - lastEventAt) / 1000;
+        const pip = document.getElementById('sync-pip');
+        if (pip.classList.contains('red')) return; // SSE error already set red
+        if (age > 30) pip.classList.add('amber'); else pip.classList.remove('amber');
+      }, 3000);
+    }
+
+    // ============================================================
+    // UTIL
+    // ============================================================
     let toastTimer;
     function toast(msg, isError = false) {
       const el = document.getElementById('toast');
@@ -644,24 +909,23 @@
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => { el.className = ''; }, 2400);
     }
-
     async function api(path, opts = {}) {
       const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       return data;
     }
-
     function showPanel(name) {
       document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
       document.getElementById(`panel-${name}`).classList.add('active');
     }
-
     function userById(uid) { return roster.find(u => u.id === uid); }
     function userName(uid) { const u = userById(uid); return u ? u.display_name : `#${uid}`; }
     function userAvatar(uid) { const u = userById(uid); return u ? (u.avatar || '🥒') : '🥒'; }
 
-    // ---- Wake lock ----
+    // ============================================================
+    // WAKE LOCK
+    // ============================================================
     async function requestWakeLock() {
       if ('wakeLock' in navigator) {
         try { wakeLock = await navigator.wakeLock.request('screen'); } catch {}
@@ -671,31 +935,82 @@
       if (wakeLock !== null && document.visibilityState === 'visible') requestWakeLock();
     });
 
-    // ---- localStorage persistence (resume in-progress match) ----
-    function saveLocal() {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          teams, firstServer, game, history, matchIndex
-        }));
-      } catch {}
+    // ============================================================
+    // SSE — MATCH CHANNEL
+    // ============================================================
+    function connectMatchSse(matchId) {
+      if (matchSse) matchSse.close();
+      matchSse = new EventSource(`/api/live/match/${matchId}/stream`);
+      matchSse.addEventListener('state', (e) => {
+        const before = serverState;
+        const after = JSON.parse(e.data);
+        serverState = after;
+        pipFlash();
+        renderBoard(after);
+
+        // Voice + visual feedback (only if there's a meaningful change)
+        if (before) {
+          const aDelta = after.score_a - (before.score_a || 0);
+          const bDelta = after.score_b - (before.score_b || 0);
+          if (aDelta > 0) { flashWinner('A'); dingPoint(); announceFromTransition(before, after); }
+          else if (bDelta > 0) { flashWinner('B'); dingPoint(); announceFromTransition(before, after); }
+          else if (aDelta < 0 || bDelta < 0 || after._undone) { flashUndo(aDelta < 0 ? 'A' : 'B'); dingUndo(); announceFromTransition(before, after); }
+          else { announceFromTransition(before, after); }
+        } else {
+          announceFromTransition(null, after);
+        }
+
+        if (after._switch_triggered) {
+          document.getElementById('switch-alert').classList.add('show');
+          setTimeout(() => speak('Switch ends.'), 1500);
+        }
+
+        if (after.is_complete && !document.getElementById('overlay').classList.contains('show')) {
+          showWinOverlay(after);
+        }
+      });
+      matchSse.addEventListener('saved', () => { /* handled by save handler */ });
+      matchSse.addEventListener('discarded', () => { /* handled by discard handler */ });
+      matchSse.addEventListener('ping', () => { pipFlash(); });
+      matchSse.onerror = () => { pipRed(); };
     }
-    function clearLocal() { try { localStorage.removeItem(STORAGE_KEY); } catch {} }
-    function loadLocal() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return null;
-        return JSON.parse(raw);
-      } catch { return null; }
+    function disconnectMatchSse() {
+      if (matchSse) { matchSse.close(); matchSse = null; }
     }
 
-    // ---- Top bar back button ----
-    document.getElementById('back-btn').addEventListener('click', () => {
-      const isLive = game && !game.is_complete;
-      const msg = isLive
-        ? 'Abandon this game? The current score will be lost.'
-        : 'Leave the scoreboard? Saved matches stay.';
+    // ============================================================
+    // SSE — SYNC CHANNEL (during team setup)
+    // ============================================================
+    function connectSyncSse() {
+      if (syncSse) syncSse.close();
+      syncSse = new EventSource('/api/live/sync/stream');
+      syncSse.addEventListener('sync_state', (e) => {
+        const s = JSON.parse(e.data);
+        syncFlicState = { a_device: s.a_device, b_device: s.b_device };
+        renderSyncModal(s.slot);
+        updateSyncChip();
+      });
+      syncSse.addEventListener('synced', (e) => {
+        const d = JSON.parse(e.data);
+        toast(`${d.slot === 'A' ? 'Team A' : 'Team B'} synced to ${d.device.name} 🔘`);
+      });
+      syncSse.onerror = () => { /* sync sse isn't critical */ };
+    }
+    function disconnectSyncSse() {
+      if (syncSse) { syncSse.close(); syncSse = null; }
+    }
+
+    // ============================================================
+    // BACK BUTTON
+    // ============================================================
+    document.getElementById('back-btn').addEventListener('click', async () => {
+      const inLive = serverState && !serverState.is_complete;
+      const msg = inLive
+        ? 'Leave the scoreboard? The match stays live in the background — you can return to it from the admin dashboard.'
+        : 'Leave the scoreboard?';
       if (!confirm(msg)) return;
-      clearLocal();
+      disconnectMatchSse();
+      disconnectSyncSse();
       window.location.replace('/admin-dash.html');
     });
 
@@ -706,8 +1021,9 @@
       const pool = document.getElementById('roster-pool');
       const inAnyTeam = new Set([...teams.A, ...teams.B]);
       const free = roster.filter(u => !inAnyTeam.has(u.id));
-      pool.innerHTML = free.length ? free.map(u => chipHtml(u, false)).join('') :
-        `<div style="color:#666;font-size:0.85rem;font-style:italic;align-self:center;">All players assigned</div>`;
+      pool.innerHTML = free.length
+        ? free.map(u => chipHtml(u, false)).join('')
+        : `<div style="color:#666;font-size:0.85rem;font-style:italic;align-self:center;">All players assigned</div>`;
       pool.querySelectorAll('.player-chip').forEach(c => {
         c.addEventListener('click', () => selectChip(c, parseInt(c.dataset.uid)));
       });
@@ -725,7 +1041,6 @@
           const chip = div.firstChild;
           chip.addEventListener('click', (ev) => {
             ev.stopPropagation();
-            // Tap a chip inside a team box → return to pool
             teams[side] = teams[side].filter(x => x !== uid);
             selectedChip = null;
             renderRoster();
@@ -736,34 +1051,26 @@
       });
 
       updateModeLabel();
+      updateSyncChipVisibility();
     }
 
     function chipHtml(u, isSelected) {
       return `<div class="player-chip${isSelected ? ' selected' : ''}" data-uid="${u.id}"><span class="av">${u.avatar || '🥒'}</span>${u.display_name}</div>`;
     }
-
     function selectChip(chipEl, uid) {
-      // If already in a team, ignore — that chip's click handler returns to pool
       const inAnyTeam = teams.A.includes(uid) || teams.B.includes(uid);
       if (inAnyTeam) return;
-      // Toggle selection
       document.querySelectorAll('.roster-pool .player-chip').forEach(c => c.classList.remove('selected'));
       if (selectedChip === uid) { selectedChip = null; return; }
       selectedChip = uid;
       chipEl.classList.add('selected');
     }
-
     function dropToTeam(side) {
-      if (!selectedChip) {
-        // Nothing armed — show a hint
-        toast('Tap a player chip first', false);
-        return;
-      }
+      if (!selectedChip) { toast('Tap a player chip first', false); return; }
       teams[side].push(selectedChip);
       selectedChip = null;
       renderRoster();
     }
-
     document.getElementById('team-a-box').addEventListener('click', () => dropToTeam('A'));
     document.getElementById('team-b-box').addEventListener('click', () => dropToTeam('B'));
 
@@ -772,10 +1079,6 @@
       const half = Math.floor(shuffled.length / 2);
       teams.A = shuffled.slice(0, half).map(u => u.id);
       teams.B = shuffled.slice(half, half * 2).map(u => u.id);
-      // odd rosters: if 3 players, leave the 3rd out — they sit this one out
-      if (shuffled.length % 2 === 1) {
-        // Already excluded by slice(half, half*2)
-      }
       selectedChip = null;
       renderRoster();
     });
@@ -798,15 +1101,90 @@
       lbl.textContent = text;
     }
 
+    // Show Sync Flic chip only when there are registered devices AND teams are valid
+    let registeredDevicesCount = 0;
+    function updateSyncChipVisibility() {
+      const chip = document.getElementById('sync-chip');
+      const teamsOk = teams.A.length > 0 && teams.B.length > 0 && teams.A.length === teams.B.length;
+      chip.style.display = (registeredDevicesCount > 0 && teamsOk) ? 'flex' : 'none';
+    }
+    function updateSyncChip() {
+      const chip = document.getElementById('sync-chip');
+      const summary = document.getElementById('sync-chip-summary');
+      const bound = (syncFlicState.a_device ? 1 : 0) + (syncFlicState.b_device ? 1 : 0);
+      if (bound === 0) {
+        chip.classList.remove('synced');
+        summary.textContent = 'Use Flic buttons (optional)';
+      } else {
+        chip.classList.add('synced');
+        summary.textContent = bound === 2 ? '✓ Both teams bound — tap to review' : `${bound} of 2 teams bound — tap to finish`;
+      }
+    }
+
     document.getElementById('teams-next-btn').addEventListener('click', () => {
       goToFlip();
     });
 
     // ============================================================
+    // SYNC FLIC MODAL
+    // ============================================================
+    async function openSyncModal() {
+      document.getElementById('sync-overlay').classList.add('show');
+      try {
+        const s = await api('/api/live/sync/state');
+        syncFlicState = { a_device: s.a_device, b_device: s.b_device };
+        renderSyncModal(s.slot);
+      } catch {}
+    }
+    function closeSyncModal() {
+      document.getElementById('sync-overlay').classList.remove('show');
+      // Cancel any active listening when closing
+      api('/api/live/sync/cancel', { method: 'POST' }).catch(() => {});
+    }
+    async function startBind(slot) {
+      try {
+        await api('/api/live/sync/listen', { method: 'POST', body: JSON.stringify({ slot }) });
+        renderSyncModal(slot);
+      } catch (e) { toast(e.message, true); }
+    }
+    async function resetSync() {
+      try { await api('/api/live/sync/reset', { method: 'POST' }); } catch {}
+    }
+    function renderSyncModal(listeningSlot) {
+      ['A','B'].forEach(slot => {
+        const line = document.getElementById(`sync-line-${slot}`);
+        const label = document.getElementById(`sync-${slot}-label`);
+        const status = document.getElementById(`sync-${slot}-status`);
+        const teamIds = teams[slot] || [];
+        const teamName = teamIds.length
+          ? teamIds.map(uid => userName(uid)).join(' & ')
+          : `Team ${slot}`;
+        label.textContent = teamName;
+
+        const device = slot === 'A' ? syncFlicState.a_device : syncFlicState.b_device;
+        line.classList.remove('listening', 'synced');
+        const btn = line.querySelector('.bind-btn');
+        if (device) {
+          line.classList.add('synced');
+          status.textContent = '✓ bound';
+          btn.textContent = 'Re-bind';
+        } else if (listeningSlot === slot) {
+          line.classList.add('listening');
+          status.textContent = 'Press your Flic now…';
+          btn.textContent = 'Cancel';
+          btn.onclick = () => api('/api/live/sync/cancel', { method: 'POST' }).then(() => renderSyncModal(null));
+        } else {
+          status.textContent = 'not bound';
+          btn.textContent = 'Bind';
+          btn.onclick = () => startBind(slot);
+        }
+      });
+    }
+
+    // ============================================================
     // STEP 2 — Coin flip
     // ============================================================
     function goToFlip() {
-      // Render team chips (read-only)
       ['A','B'].forEach(side => {
         const target = document.getElementById(`flip-team-${side.toLowerCase()}-players`);
         target.innerHTML = teams[side].map(uid => chipHtml(userById(uid), false)).join(' ');
@@ -823,12 +1201,8 @@
       const coin = document.getElementById('coin');
       const flipBtn = document.getElementById('flip-btn');
       const result = Math.random() < 0.5 ? 'A' : 'B';
-
-      // Heads (A) face is forward when rotation mod 360 = 0; tails (B) when mod 360 = 180.
-      // Spin at least 4 full turns, then add whatever extra rotation is needed to *land*
-      // on the target face — measured in absolute terms, not relative to the previous flip.
       const targetMod = result === 'A' ? 0 : 180;
-      const minTurns = 4 + Math.floor(Math.random() * 3);  // 4-6 full spins
+      const minTurns = 4 + Math.floor(Math.random() * 3);
       const minRot = coinRotation + minTurns * 360;
       const minMod = ((minRot % 360) + 360) % 360;
       const correction = ((targetMod - minMod) + 360) % 360;
@@ -836,9 +1210,7 @@
 
       coin.style.setProperty('--start-rot', `${coinRotation}deg`);
       coin.style.setProperty('--end-rot', `${finalRot}deg`);
-      coin.classList.remove('spinning');
-      void coin.offsetWidth; // restart animation
-      coin.classList.add('spinning');
+      coin.classList.remove('spinning'); void coin.offsetWidth; coin.classList.add('spinning');
       coin.style.transform = `rotateY(${finalRot}deg)`;
       coinRotation = finalRot;
 
@@ -850,247 +1222,185 @@
         flipBtn.disabled = false;
       }, 1400);
     });
-
     function setFirstServer(side) {
       firstServer = side;
       ['flip-team-a-box','flip-team-b-box'].forEach(id => document.getElementById(id).classList.remove('first-server'));
       document.getElementById(`flip-team-${side.toLowerCase()}-box`).classList.add('first-server');
       document.getElementById('start-btn').disabled = false;
     }
-
     document.getElementById('flip-team-a-box').addEventListener('click', () => setFirstServer('A'));
     document.getElementById('flip-team-b-box').addEventListener('click', () => setFirstServer('B'));
 
-    document.getElementById('start-btn').addEventListener('click', () => {
-      initGame();
+    document.getElementById('start-btn').addEventListener('click', async () => {
+      try {
+        const m = await api('/api/live/match/start', {
+          method: 'POST',
+          body: JSON.stringify({
+            session_id: SESSION_ID,
+            team_a_ids: teams.A,
+            team_b_ids: teams.B,
+            serving_team: firstServer
+          })
+        });
+        // First-render and SSE connection happen in handleMatchActive
+        handleMatchActive(m);
+        // First call: "0, 0, 2, X to serve"
+        announceFromTransition(null, m);
+      } catch (e) { toast(e.message, true); }
+    });
+
+    // ============================================================
+    // STEP 3 — Scoreboard
+    // ============================================================
+    function handleMatchActive(m) {
+      serverState = m;
+      lastState = null;
+      // Roster (for serving names) — pre-fetched in init() and lives in `roster`
+      // Connect SSE
+      connectMatchSse(m.id);
       showPanel('board');
       requestWakeLock();
-      // First-serve announcement: "0, 0, 2, Darren to serve"
-      announceCurrent(null);
-    });
-
-    // ============================================================
-    // STEP 3 — Live scoreboard (TRADITIONAL scoring)
-    // ============================================================
-    function initGame() {
-      // Server slot index: 0 = first player in team's array, 1 = partner.
-      // First serve in a doubles match traditionally counts as Server 2 (only one server before first side-out)
-      const isDoubles = teams.A.length === 2 && teams.B.length === 2;
-      game = {
-        score_a: 0,
-        score_b: 0,
-        serving_team: firstServer,
-        server_number: 1,                    // always 1 to start; flips to 2 mid-rotation in doubles
-        is_match_start: true,                // applies the special "0-0-start" rule
-        server_slot: 0,                      // 0 or 1 — which player on the serving team is up
-        is_doubles: isDoubles,
-        is_complete: false,
-        switch_acknowledged: false,
-        match_index: matchIndex
-      };
-      history = [];
-      saveLocal();
-      renderBoard();
+      renderBoard(m);
+      startStalenessCheck();
+      lastEventAt = Date.now();
+      pipFlash();
     }
 
-    function snapshot() { return JSON.parse(JSON.stringify(game)); }
-    function pushHistory() { history.push(snapshot()); if (history.length > 200) history.shift(); }
+    function renderBoard(m) {
+      if (!m) return;
+      document.getElementById('board-a-score').textContent = m.score_a;
+      document.getElementById('board-b-score').textContent = m.score_b;
 
-    function applyTap(rallyWinner) {
-      if (!game || game.is_complete) return;
-      const before = snapshot();
-      pushHistory();
-
-      if (rallyWinner === game.serving_team) {
-        // Serving team scored — server stays the same player, they switch
-        // sides (visual only). Crucially, is_match_start stays true until
-        // the first serving team actually loses service: traditional rules
-        // say only ONE server on the first team gets a turn before side-out,
-        // no matter how many points they score.
-        if (rallyWinner === 'A') game.score_a++;
-        else game.score_b++;
-      } else {
-        // Receiving team won the rally — server changes, no point added
-        if (!game.is_doubles) {
-          // Singles — every lost rally by serving team is a side-out
-          game.serving_team = (game.serving_team === 'A') ? 'B' : 'A';
-          game.server_slot = 0;
-          game.server_number = 1;
-        } else if (game.is_match_start || game.server_number === 2) {
-          // Side-out (either start-of-match special rule, or already 2nd server)
-          game.serving_team = (game.serving_team === 'A') ? 'B' : 'A';
-          game.server_slot = 0;
-          game.server_number = 1;
-          game.is_match_start = false;
-        } else {
-          // Move from server #1 to #2 — partner takes over
-          game.server_number = 2;
-          game.server_slot = (game.server_slot === 0) ? 1 : 0;
-        }
-      }
-
-      // Check side-switch alert (first time either side hits 6)
-      let triggeredSwitch = false;
-      if (!game.switch_acknowledged && (game.score_a >= SWITCH_AT || game.score_b >= SWITCH_AT)) {
-        document.getElementById('switch-alert').classList.add('show');
-        game.switch_acknowledged = true;
-        triggeredSwitch = true;
-      }
-
-      // Check win first — if game's over, announce win instead of score
-      checkWin();
-      saveLocal();
-      renderBoard();
-
-      // Voice: announce score, then optionally side-switch (after a beat)
-      if (!game.is_complete) {
-        announceCurrent(before);
-        if (triggeredSwitch) {
-          setTimeout(() => speak('Switch ends.'), 1600);
-        }
-      }
-    }
-
-    function checkWin() {
-      const a = game.score_a, b = game.score_b;
-      if ((a >= GAME_TO || b >= GAME_TO) && Math.abs(a - b) >= 2) {
-        game.is_complete = true;
-        showWinOverlay(a > b ? 'A' : 'B');
-      }
-    }
-
-    function renderBoard() {
-      // Scores
-      document.getElementById('board-a-score').textContent = game.score_a;
-      document.getElementById('board-b-score').textContent = game.score_b;
-
-      // Names with serving highlight
-      const renderNames = (side) => {
-        const ids = teams[side];
+      const renderNames = (side, ids) => {
         return ids.map((uid, idx) => {
-          const isServingTeam = game.serving_team === side;
-          const isCurServer = isServingTeam && idx === game.server_slot;
+          const isServingTeam = m.serving_team === side;
+          const isCurServer = isServingTeam && idx === m.server_slot;
           return `<span class="pname${isCurServer ? ' serving' : ''}">${userAvatar(uid)} ${userName(uid)}</span>`;
-        }).join('·');
+        }).join(' · ');
       };
-      document.getElementById('board-a-names').innerHTML = renderNames('A');
-      document.getElementById('board-b-names').innerHTML = renderNames('B');
+      document.getElementById('board-a-names').innerHTML = renderNames('A', m.team_a_ids);
+      document.getElementById('board-b-names').innerHTML = renderNames('B', m.team_b_ids);
 
-      // Highlight serving half
-      document.getElementById('board-a').classList.toggle('serving', game.serving_team === 'A');
-      document.getElementById('board-b').classList.toggle('serving', game.serving_team === 'B');
+      document.getElementById('board-a').classList.toggle('serving', m.serving_team === 'A');
+      document.getElementById('board-b').classList.toggle('serving', m.serving_team === 'B');
 
-      // Score call
-      const sScore = game.serving_team === 'A' ? game.score_a : game.score_b;
-      const rScore = game.serving_team === 'A' ? game.score_b : game.score_a;
-      const callTail = game.is_match_start ? 'start' : (game.is_doubles ? game.server_number : '—');
+      const sScore = m.serving_team === 'A' ? m.score_a : m.score_b;
+      const rScore = m.serving_team === 'A' ? m.score_b : m.score_a;
+      const callTail = m.is_match_start ? 'start' : (m.is_doubles ? m.server_number : '—');
       document.getElementById('board-call').textContent = `${sScore} – ${rScore} – ${callTail}`;
 
-      // Who serves caption
-      const servingPlayer = userName(teams[game.serving_team][game.server_slot]);
-      const sideText = (game.is_doubles && !game.is_match_start) ? ` · server ${game.server_number}` : (game.is_match_start ? ' · start of match' : '');
+      const servingId = m.serving_team === 'A' ? m.team_a_ids[m.server_slot] : m.team_b_ids[m.server_slot];
+      const servingPlayer = userName(servingId);
+      const sideText = (m.is_doubles && !m.is_match_start) ? ` · server ${m.server_number}` : (m.is_match_start ? ' · start of match' : '');
       document.getElementById('board-who-serves').textContent = `${servingPlayer} serving${sideText}`;
 
-      // Top bar match # + undo state
-      document.getElementById('bar-title').textContent = `Match #${game.match_index}`;
+      document.getElementById('bar-title-text').textContent = `Match #${m.match_label || 1}`;
       const undoBtn = document.getElementById('undo-btn');
       undoBtn.style.display = '';
-      undoBtn.disabled = history.length === 0 || game.is_complete;
+      undoBtn.disabled = !!m.is_complete;
     }
 
-    document.getElementById('board-a').addEventListener('click', () => applyTap('A'));
-    document.getElementById('board-b').addEventListener('click', () => applyTap('B'));
+    async function clickTeam(team) {
+      if (!serverState || serverState.is_complete) return;
+      try {
+        await api(`/api/live/match/${serverState.id}/click`, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'point', team, actor: 'phone' })
+        });
+      } catch (e) { toast(e.message, true); }
+    }
 
-    document.getElementById('undo-btn').addEventListener('click', () => {
-      if (!history.length) return;
-      // Cancel any in-flight announcement so undo doesn't speak a stale call
+    document.getElementById('board-a').addEventListener('click', () => clickTeam('A'));
+    document.getElementById('board-b').addEventListener('click', () => clickTeam('B'));
+
+    document.getElementById('undo-btn').addEventListener('click', async () => {
+      if (!serverState) return;
       try { speechSynthesis.cancel(); } catch {}
-      game = history.pop();
-      saveLocal();
-      renderBoard();
+      try {
+        await api(`/api/live/match/${serverState.id}/click`, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'undo' })
+        });
+      } catch (e) { toast(e.message, true); }
     });
 
-    document.getElementById('switch-ok').addEventListener('click', () => {
+    document.getElementById('switch-ok').addEventListener('click', async () => {
       document.getElementById('switch-alert').classList.remove('show');
+      if (serverState) {
+        await api(`/api/live/match/${serverState.id}/click`, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'switch_ack' })
+        }).catch(() => {});
+      }
     });
 
-    function showWinOverlay(winner) {
-      const winNames = teams[winner].map(uid => userName(uid)).join(' & ');
+    function showWinOverlay(m) {
+      const winner = m.score_a > m.score_b ? 'A' : 'B';
+      const winNames = (winner === 'A' ? m.team_a_ids : m.team_b_ids).map(uid => userName(uid)).join(' & ');
       document.getElementById('overlay-winner').textContent = `${winNames} won!`;
-      document.getElementById('overlay-final').textContent = `${game.score_a} – ${game.score_b}`;
+      document.getElementById('overlay-final').textContent = `${m.score_a} – ${m.score_b}`;
       document.getElementById(`board-${winner.toLowerCase()}`).classList.add('winner');
       document.getElementById('overlay').classList.add('show');
-      const undo = document.getElementById('undo-btn');
-      undo.disabled = true;
-      // Voice: "Game! Anna and Joe won eleven, nine"
-      const winningScore = winner === 'A' ? game.score_a : game.score_b;
-      const losingScore  = winner === 'A' ? game.score_b : game.score_a;
-      const joinedNames = teams[winner].map(uid => userName(uid)).join(' and ');
-      speak(`Game! ${joinedNames} won, ${numWord(winningScore)}, ${numWord(losingScore)}.`);
+      document.getElementById('undo-btn').disabled = true;
+      speakWinner(m);
     }
-
     function hideWinOverlay() {
       document.getElementById('overlay').classList.remove('show');
       document.getElementById('board-a').classList.remove('winner');
       document.getElementById('board-b').classList.remove('winner');
     }
 
-    async function saveCurrentMatch() {
-      const body = {
-        team_a_ids: teams.A,
-        team_b_ids: teams.B,
-        team_a_score: game.score_a,
-        team_b_score: game.score_b
-      };
-      try {
-        await api(`/api/sessions/${SESSION_ID}/results/append`, {
-          method: 'POST',
-          body: JSON.stringify(body)
-        });
-        toast('Match saved 🏆');
-        return true;
-      } catch (e) {
-        toast(e.message, true);
-        return false;
-      }
-    }
-
     document.getElementById('ov-save-next').addEventListener('click', async () => {
-      const ok = await saveCurrentMatch();
-      if (!ok) return;
-      hideWinOverlay();
-      matchIndex++;
-      // Reset for the next match: keep the squad on the page but go back to team-pick
-      // (so the user can rotate partners). Reset teams + first server.
-      teams = { A: [], B: [] };
-      firstServer = null;
-      selectedChip = null;
-      game = null;
-      history = [];
-      clearLocal();
-      renderRoster();
-      showPanel('teams');
+      if (!serverState) return;
+      try {
+        await api(`/api/live/match/${serverState.id}/save`, { method: 'POST' });
+        toast('Match saved 🏆');
+        disconnectMatchSse();
+        hideWinOverlay();
+        // Reset to team-pick for next match (same session)
+        teams = { A: [], B: [] };
+        firstServer = null;
+        selectedChip = null;
+        serverState = null;
+        lastState = null;
+        renderRoster();
+        showPanel('teams');
+        // Reload sync state (fresh per match)
+        try { await api('/api/live/sync/reset', { method: 'POST' }); } catch {}
+        syncFlicState = { a_device: null, b_device: null };
+        updateSyncChip();
+      } catch (e) { toast(e.message, true); }
     });
 
     document.getElementById('ov-save-finish').addEventListener('click', async () => {
-      const ok = await saveCurrentMatch();
-      if (!ok) return;
-      clearLocal();
-      window.location.replace('/admin-dash.html');
+      if (!serverState) return;
+      try {
+        await api(`/api/live/match/${serverState.id}/save`, { method: 'POST' });
+        toast('Match saved 🏆');
+        disconnectMatchSse();
+        disconnectSyncSse();
+        window.location.replace('/admin-dash.html');
+      } catch (e) { toast(e.message, true); }
     });
 
-    document.getElementById('ov-discard').addEventListener('click', () => {
-      if (!confirm('Throw this game away? It won\'t be saved.')) return;
-      hideWinOverlay();
-      matchIndex++;
-      teams = { A: [], B: [] };
-      firstServer = null;
-      selectedChip = null;
-      game = null;
-      history = [];
-      clearLocal();
-      renderRoster();
-      showPanel('teams');
+    document.getElementById('ov-discard').addEventListener('click', async () => {
+      if (!confirm("Throw this game away? It won't be saved.")) return;
+      if (!serverState) return;
+      try {
+        await api(`/api/live/match/${serverState.id}/discard`, { method: 'POST' });
+        disconnectMatchSse();
+        hideWinOverlay();
+        teams = { A: [], B: [] };
+        firstServer = null;
+        selectedChip = null;
+        serverState = null;
+        lastState = null;
+        renderRoster();
+        showPanel('teams');
+        try { await api('/api/live/sync/reset', { method: 'POST' }); } catch {}
+        syncFlicState = { a_device: null, b_device: null };
+        updateSyncChip();
+      } catch (e) { toast(e.message, true); }
     });
 
     // ============================================================
@@ -1105,42 +1415,37 @@
       try {
         const me = await api('/api/auth/me');
         if (!me.admin) {
-          toast('Admin only — for now', true);
+          toast('Admin only', true);
           setTimeout(() => window.location.replace('/'), 1500);
           return;
         }
         const data = await api(`/api/sessions/${SESSION_ID}/responses`);
         session = data.session;
-        // Roster = roster_entries, hydrate from responses where available, else from non_responders
         const userIndex = {};
         [...data.responses, ...data.non_responders].forEach(u => {
           userIndex[u.user_id || u.id] = { id: u.user_id || u.id, display_name: u.display_name, avatar: u.avatar || '🥒' };
         });
-        roster = data.current_roster
-          .map(uid => userIndex[uid])
-          .filter(Boolean);
+        roster = data.current_roster.map(uid => userIndex[uid]).filter(Boolean);
         if (!roster.length) {
           toast('No published roster on this session', true);
           setTimeout(() => window.location.replace('/admin-dash.html'), 1800);
           return;
         }
 
-        // Try to resume an in-progress match from localStorage
-        const cached = loadLocal();
-        if (cached && cached.game && !cached.game.is_complete) {
-          if (confirm('Resume in-progress match?')) {
-            teams = cached.teams;
-            firstServer = cached.firstServer;
-            game = cached.game;
-            history = cached.history || [];
-            matchIndex = cached.matchIndex || 1;
-            renderBoard();
-            showPanel('board');
-            requestWakeLock();
-            return;
-          } else {
-            clearLocal();
-          }
+        // How many registered Flic devices exist? Controls visibility of the sync chip.
+        try {
+          const devices = await api('/api/live/devices');
+          registeredDevicesCount = devices.length;
+        } catch {}
+
+        // Open sync SSE (will hold connection for the whole session)
+        connectSyncSse();
+
+        // Try to resume an active live match for this session
+        const active = await api(`/api/live/match/active?session_id=${SESSION_ID}`).catch(() => null);
+        if (active && !active.is_complete) {
+          handleMatchActive(active);
+          return;
         }
 
         renderRoster();

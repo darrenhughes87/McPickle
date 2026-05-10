@@ -519,6 +519,7 @@
     <div class="tab active" id="tab-sessions" onclick="switchTab('sessions')">📅 Sessions</div>
     <div class="tab" id="tab-squad" onclick="switchTab('squad')">👥 Squad</div>
     <div class="tab" id="tab-leaderboard" onclick="switchTab('leaderboard')">🏆 League</div>
+    <div class="tab" id="tab-devices" onclick="switchTab('devices')">🔘 Flics</div>
   </div>
 
   <main>
@@ -532,6 +533,10 @@
 
     <div class="tab-panel" id="panel-leaderboard">
       <div id="leaderboard-content"><div class="spinner"></div></div>
+    </div>
+
+    <div class="tab-panel" id="panel-devices">
+      <div id="devices-content"><div class="spinner"></div></div>
     </div>
   </main>
 
@@ -647,6 +652,7 @@
       document.getElementById(`tab-${name}`).classList.add('active');
       document.getElementById(`panel-${name}`).classList.add('active');
       if (name === 'leaderboard') loadLeaderboard();
+      if (name === 'devices') loadDevices();
     }
 
     // ---- SESSIONS ----
@@ -1493,6 +1499,86 @@
       } catch (e) {
         el.innerHTML = `<div class="empty"><p>Couldn't load: ${e.message}</p></div>`;
       }
+    }
+
+    // ---- DEVICES (Flic buttons) ----
+    async function loadDevices() {
+      const el = document.getElementById('devices-content');
+      try {
+        const devices = await api('/api/live/devices');
+        let html = `<div class="section-head">🔘 Flic buttons</div>
+          <div class="card" style="font-size:0.85rem;color:#aaa;line-height:1.45;">
+            Register each Flic 2 once here, then paste the generated webhook URLs into the Flic app on your iPad / phone.
+            Per-match team binding happens later, in the live-score setup screen, after teams are picked.
+            Setup walkthrough: see <code>FLIC-SETUP.md</code> locally.
+          </div>
+          <div class="section-head" style="margin-top:1.5rem;">Add a new Flic</div>
+          <div class="card">
+            <div class="form-row">
+              <label>Friendly name</label>
+              <input type="text" id="new-device-name" placeholder="e.g. Green Flic (left post)">
+              <div class="hint">Just for you — helps identify which physical button is which.</div>
+            </div>
+            <button class="btn btn-primary" onclick="createDevice()">➕ Register Flic</button>
+          </div>`;
+
+        html += `<div class="section-head" style="margin-top:1.5rem;">Registered (${devices.length})</div>`;
+        if (!devices.length) {
+          html += `<div class="empty"><p>No Flic buttons registered yet.</p></div>`;
+        } else {
+          devices.forEach(d => {
+            html += `<div class="user-row" id="dev-row-${d.id}">
+              <div style="font-size:1.4rem;width:32px;text-align:center;">🔘</div>
+              <div style="flex:1;min-width:0;">
+                <div class="user-name">${d.name}</div>
+                <div class="user-handle">${d.device_uid}</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="showDeviceWebhooks(${d.id})">URLs</button>
+              <button class="btn btn-red btn-sm" onclick="deleteDevice(${d.id}, '${d.name.replace(/'/g, "\\'")}')">Remove</button>
+            </div>`;
+          });
+        }
+        el.innerHTML = html;
+      } catch (e) {
+        el.innerHTML = `<div class="empty"><p>Couldn't load Flics: ${e.message}</p></div>`;
+      }
+    }
+
+    async function createDevice() {
+      const name = document.getElementById('new-device-name').value.trim();
+      if (!name) { toast('Give it a name first', true); return; }
+      try {
+        const d = await api('/api/live/devices', { method: 'POST', body: JSON.stringify({ name }) });
+        showWebhookModal(d);
+        loadDevices();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function deleteDevice(id, name) {
+      if (!confirm(`Remove "${name}"? Any active team bindings will be cleared.`)) return;
+      try {
+        await api(`/api/live/devices/${id}`, { method: 'DELETE' });
+        toast('Flic removed');
+        loadDevices();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function showDeviceWebhooks(id) {
+      // Re-fetch the device to get its webhooks fresh (URLs need the token which the list endpoint omits)
+      // Easier: tell the user to remove and re-add if they've lost the URLs
+      alert(`Webhook URLs are only shown once when the Flic is first registered.\n\nIf you've lost them, remove this Flic and add it again — it'll generate fresh URLs.\n\n(The token is stored hashed for security; we can't recover it.)`);
+    }
+
+    function showWebhookModal(d) {
+      const message = `🔘 Flic registered!\n\n` +
+        `Paste these URLs into the Flic app's button settings.\n\n` +
+        `─── SINGLE CLICK (= point) ───\n${d.webhooks.click}\n\n` +
+        `─── HOLD (= undo) ───\n${d.webhooks.hold}\n\n` +
+        `⚠️ These URLs are shown ONCE. Save them now.`;
+      // Try clipboard
+      const blob = `# ${d.name}\nSingle click: ${d.webhooks.click}\nHold: ${d.webhooks.hold}\n`;
+      try { navigator.clipboard.writeText(blob); } catch {}
+      alert(message + '\n\n(Both URLs also copied to clipboard.)');
     }
 
     // ---- Init ----

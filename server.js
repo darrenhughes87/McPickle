@@ -117,6 +117,46 @@ db.exec(`
     UNIQUE(user_id, code)
   );
 
+  CREATE TABLE IF NOT EXISTS live_devices (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_uid  TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
+    token       TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS live_matches (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id      INTEGER NOT NULL REFERENCES pickle_sessions(id) ON DELETE CASCADE,
+    match_label     INTEGER NOT NULL DEFAULT 1,
+    team_a_ids      TEXT NOT NULL,
+    team_b_ids      TEXT NOT NULL,
+    team_a_device   INTEGER REFERENCES live_devices(id) ON DELETE SET NULL,
+    team_b_device   INTEGER REFERENCES live_devices(id) ON DELETE SET NULL,
+    score_a         INTEGER NOT NULL DEFAULT 0,
+    score_b         INTEGER NOT NULL DEFAULT 0,
+    serving_team    TEXT NOT NULL,
+    server_number   INTEGER NOT NULL DEFAULT 1,
+    server_slot     INTEGER NOT NULL DEFAULT 0,
+    is_match_start  INTEGER NOT NULL DEFAULT 1,
+    is_doubles      INTEGER NOT NULL,
+    switch_acked    INTEGER NOT NULL DEFAULT 0,
+    is_complete     INTEGER NOT NULL DEFAULT 0,
+    match_result_id INTEGER REFERENCES match_results(id) ON DELETE SET NULL,
+    started_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    last_event_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS live_events (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    match_id     INTEGER NOT NULL REFERENCES live_matches(id) ON DELETE CASCADE,
+    event_type   TEXT NOT NULL,
+    team         TEXT,
+    actor        TEXT NOT NULL,
+    state_after  TEXT NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE INDEX IF NOT EXISTS idx_auth_sessions_token ON auth_sessions(token);
   CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at);
   CREATE INDEX IF NOT EXISTS idx_pickle_sessions_status ON pickle_sessions(status);
@@ -124,6 +164,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_roster_session ON roster_entries(session_id);
   CREATE INDEX IF NOT EXISTS idx_match_results_session ON match_results(session_id);
   CREATE INDEX IF NOT EXISTS idx_achievements_user ON achievements(user_id);
+  CREATE INDEX IF NOT EXISTS idx_live_matches_session ON live_matches(session_id, is_complete);
+  CREATE INDEX IF NOT EXISTS idx_live_events_match ON live_events(match_id);
 `);
 
 // --- Migrations for older databases ---
@@ -1208,6 +1250,442 @@ app.post('/api/sessions/:id/results/append', requireAdmin, (req, res) => {
   checkAchievementsAfterMatch(involvedUserIds);
 
   res.json({ ok: true, match_index: next });
+});
+
+// ============================================================
+// --- LIVE SCORING ------------------------------------------
+// ============================================================
+// Server-authoritative live match state, SSE for real-time
+// push to all viewing clients, webhook endpoint for Flic-style
+// remote buttons.
+// ============================================================
+
+const GAME_TO = 11;
+const SWITCH_AT = 6;
+
+// In-memory: SSE client registries (match_id → Set of res),
+// plus a per-admin "pending sync slot" used during the team-setup
+// flow before a match exists.
+const matchSseClients = new Map();
+const syncListening   = new Map();   // adminToken → { slot:'A'|'B', a_device, b_device, last_event_at }
+const syncSseClients  = new Map();   // adminToken → Set of res
+
+function ssePush(map, key, eventName, payload) {
+  const clients = map.get(key);
+  if (!clients) return;
+  const data = JSON.stringify(payload);
+  for (const res of clients) {
+    try { res.write(`event: ${eventName}\ndata: ${data}\n\n`); }
+    catch { /* dead connection, will be cleaned up by close handler */ }
+  }
+}
+
+function hydrateMatch(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    team_a_ids: JSON.parse(row.team_a_ids),
+    team_b_ids: JSON.parse(row.team_b_ids),
+    is_match_start: !!row.is_match_start,
+    is_doubles: !!row.is_doubles,
+    switch_acked: !!row.switch_acked,
+    is_complete: !!row.is_complete
+  };
+}
+
+function getLiveMatch(id) {
+  const row = db.prepare('SELECT * FROM live_matches WHERE id = ?').get(id);
+  return hydrateMatch(row);
+}
+
+function logLiveEvent(matchId, eventType, team, actor, state) {
+  db.prepare(`INSERT INTO live_events (match_id, event_type, team, actor, state_after) VALUES (?, ?, ?, ?, ?)`)
+    .run(matchId, eventType, team || null, actor, JSON.stringify(state));
+  db.prepare(`UPDATE live_matches SET last_event_at = datetime('now') WHERE id = ?`).run(matchId);
+}
+
+// The traditional-scoring state machine (port of the client-side logic).
+function applyPoint(match, rallyWinner) {
+  if (match.is_complete) return match;
+  if (rallyWinner !== 'A' && rallyWinner !== 'B') return match;
+
+  if (rallyWinner === match.serving_team) {
+    if (rallyWinner === 'A') match.score_a++;
+    else match.score_b++;
+  } else {
+    if (!match.is_doubles) {
+      match.serving_team = match.serving_team === 'A' ? 'B' : 'A';
+      match.server_slot = 0;
+      match.server_number = 1;
+    } else if (match.is_match_start || match.server_number === 2) {
+      match.serving_team = match.serving_team === 'A' ? 'B' : 'A';
+      match.server_slot = 0;
+      match.server_number = 1;
+      match.is_match_start = false;
+    } else {
+      match.server_number = 2;
+      match.server_slot = match.server_slot === 0 ? 1 : 0;
+    }
+  }
+
+  // Side-switch alert state (sent in payload as a hint to the UI)
+  match._switch_triggered = false;
+  if (!match.switch_acked && (match.score_a >= SWITCH_AT || match.score_b >= SWITCH_AT)) {
+    match.switch_acked = true;
+    match._switch_triggered = true;
+  }
+
+  if ((match.score_a >= GAME_TO || match.score_b >= GAME_TO)
+      && Math.abs(match.score_a - match.score_b) >= 2) {
+    match.is_complete = true;
+  }
+
+  return match;
+}
+
+function persistMatchState(match) {
+  db.prepare(`
+    UPDATE live_matches
+    SET score_a = ?, score_b = ?, serving_team = ?,
+        server_number = ?, server_slot = ?, is_match_start = ?,
+        switch_acked = ?, is_complete = ?
+    WHERE id = ?
+  `).run(
+    match.score_a, match.score_b, match.serving_team,
+    match.server_number, match.server_slot, match.is_match_start ? 1 : 0,
+    match.switch_acked ? 1 : 0, match.is_complete ? 1 : 0,
+    match.id
+  );
+}
+
+function broadcastMatch(matchId, eventType = 'state', extra = {}) {
+  const m = getLiveMatch(matchId);
+  if (!m) return;
+  ssePush(matchSseClients, matchId, eventType, { ...m, ...extra });
+}
+
+// --- Devices (one-time-per-Flic registration) ---
+function newDeviceUid() { return 'flic_' + randomBytes(3).toString('hex'); }
+
+app.get('/api/live/devices', requireAdmin, (req, res) => {
+  res.json(db.prepare('SELECT id, device_uid, name, created_at FROM live_devices ORDER BY created_at DESC').all());
+});
+
+app.post('/api/live/devices', requireAdmin, (req, res) => {
+  const name = (req.body?.name || '').trim() || 'Flic';
+  const device_uid = newDeviceUid();
+  const token = randomBytes(16).toString('hex');
+  const r = db.prepare('INSERT INTO live_devices (device_uid, name, token) VALUES (?, ?, ?)').run(device_uid, name, token);
+
+  const host = `${req.protocol}://${req.get('host')}`;
+  res.json({
+    id: r.lastInsertRowid,
+    device_uid,
+    name,
+    token,
+    webhooks: {
+      click: `${host}/api/live/webhook/${device_uid}?gesture=click&token=${token}`,
+      hold:  `${host}/api/live/webhook/${device_uid}?gesture=hold&token=${token}`
+    }
+  });
+});
+
+app.delete('/api/live/devices/:id', requireAdmin, (req, res) => {
+  db.prepare('DELETE FROM live_devices WHERE id = ?').run(parseInt(req.params.id));
+  res.json({ ok: true });
+});
+
+// --- Pre-match sync flow (bind a Flic to a team during setup) ---
+function adminToken(req) { return req.cookies?.session_token || null; }
+
+app.post('/api/live/sync/listen', requireAdmin, (req, res) => {
+  const slot = req.body?.slot;
+  if (slot !== 'A' && slot !== 'B') return res.status(400).json({ error: 'slot must be A or B' });
+  const tok = adminToken(req);
+  const cur = syncListening.get(tok) || {};
+  cur.slot = slot;
+  syncListening.set(tok, cur);
+  res.json({ ok: true });
+});
+
+app.post('/api/live/sync/cancel', requireAdmin, (req, res) => {
+  syncListening.delete(adminToken(req));
+  res.json({ ok: true });
+});
+
+app.post('/api/live/sync/reset', requireAdmin, (req, res) => {
+  syncListening.set(adminToken(req), {});
+  ssePush(syncSseClients, adminToken(req), 'sync_state', { a_device: null, b_device: null, slot: null });
+  res.json({ ok: true });
+});
+
+app.get('/api/live/sync/state', requireAdmin, (req, res) => {
+  const s = syncListening.get(adminToken(req)) || {};
+  res.json({ slot: s.slot || null, a_device: s.a_device || null, b_device: s.b_device || null });
+});
+
+app.get('/api/live/sync/stream', requireAdmin, (req, res) => {
+  const tok = adminToken(req);
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  res.flushHeaders();
+  const s = syncListening.get(tok) || {};
+  res.write(`event: sync_state\ndata: ${JSON.stringify({ slot: s.slot || null, a_device: s.a_device || null, b_device: s.b_device || null })}\n\n`);
+
+  if (!syncSseClients.has(tok)) syncSseClients.set(tok, new Set());
+  syncSseClients.get(tok).add(res);
+
+  const ping = setInterval(() => {
+    try { res.write(`event: ping\ndata: ${Date.now()}\n\n`); } catch {}
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(ping);
+    syncSseClients.get(tok)?.delete(res);
+  });
+});
+
+// --- Match lifecycle ---
+app.post('/api/live/match/start', requireAdmin, (req, res) => {
+  const { session_id, team_a_ids, team_b_ids, serving_team } = req.body;
+  if (!session_id) return res.status(400).json({ error: 'session_id required' });
+  if (!Array.isArray(team_a_ids) || !team_a_ids.length) return res.status(400).json({ error: 'team_a_ids required' });
+  if (!Array.isArray(team_b_ids) || !team_b_ids.length) return res.status(400).json({ error: 'team_b_ids required' });
+  if (serving_team !== 'A' && serving_team !== 'B') return res.status(400).json({ error: 'serving_team must be A or B' });
+
+  const sess = db.prepare('SELECT id FROM pickle_sessions WHERE id = ?').get(session_id);
+  if (!sess) return res.status(404).json({ error: 'Session not found' });
+
+  // Pull bindings from the admin's sync state (if any)
+  const syncState = syncListening.get(adminToken(req)) || {};
+  const a_device = syncState.a_device ? db.prepare('SELECT id FROM live_devices WHERE id = ?').get(syncState.a_device)?.id || null : null;
+  const b_device = syncState.b_device ? db.prepare('SELECT id FROM live_devices WHERE id = ?').get(syncState.b_device)?.id || null : null;
+
+  const is_doubles = team_a_ids.length === 2 && team_b_ids.length === 2 ? 1 : 0;
+
+  // What match number is this in the session? Just for label.
+  const prior = db.prepare('SELECT COUNT(*) AS c FROM live_matches WHERE session_id = ?').get(session_id).c;
+  const matchLabel = prior + 1;
+
+  const r = db.prepare(`
+    INSERT INTO live_matches
+      (session_id, match_label, team_a_ids, team_b_ids, team_a_device, team_b_device,
+       serving_team, is_doubles, is_match_start)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `).run(
+    session_id, matchLabel,
+    JSON.stringify(team_a_ids), JSON.stringify(team_b_ids),
+    a_device, b_device,
+    serving_team, is_doubles
+  );
+
+  const match = getLiveMatch(r.lastInsertRowid);
+  logLiveEvent(match.id, 'start', null, 'admin', match);
+
+  // Clear sync state after use (bindings are per-match)
+  syncListening.delete(adminToken(req));
+
+  res.json(match);
+});
+
+app.get('/api/live/match/active', requireAdmin, (req, res) => {
+  const session_id = parseInt(req.query.session_id);
+  if (!session_id) return res.status(400).json({ error: 'session_id required' });
+  const row = db.prepare(`
+    SELECT * FROM live_matches
+    WHERE session_id = ? AND is_complete = 0
+    ORDER BY id DESC LIMIT 1
+  `).get(session_id);
+  res.json(hydrateMatch(row));
+});
+
+app.get('/api/live/match/:id', requireAdmin, (req, res) => {
+  const m = getLiveMatch(parseInt(req.params.id));
+  if (!m) return res.status(404).json({ error: 'Live match not found' });
+  res.json(m);
+});
+
+app.post('/api/live/match/:id/click', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const m = getLiveMatch(id);
+  if (!m) return res.status(404).json({ error: 'Live match not found' });
+  if (m.is_complete) return res.status(409).json({ error: 'Match already complete' });
+
+  const action = req.body?.action;
+  if (action === 'point') {
+    const team = req.body?.team;
+    if (team !== 'A' && team !== 'B') return res.status(400).json({ error: 'team must be A or B' });
+    const before = { ...m };
+    const next = applyPoint(m, team);
+    persistMatchState(next);
+    logLiveEvent(id, 'point', team, req.body?.actor || 'phone', next);
+    const switchTriggered = next._switch_triggered;
+    broadcastMatch(id, 'state', { _switch_triggered: switchTriggered, _scored_team: team });
+    res.json(getLiveMatch(id));
+  } else if (action === 'undo') {
+    // Find the last event for this match, restore previous state
+    const events = db.prepare('SELECT * FROM live_events WHERE match_id = ? ORDER BY id DESC LIMIT 2').all(id);
+    if (events.length < 2) return res.status(409).json({ error: 'Nothing to undo' });
+    // events[0] = latest, events[1] = previous (the state we want to restore)
+    const prevState = JSON.parse(events[1].state_after);
+    persistMatchState(prevState);
+    // Drop the latest event from history so subsequent undos walk further back
+    db.prepare('DELETE FROM live_events WHERE id = ?').run(events[0].id);
+    db.prepare(`UPDATE live_matches SET last_event_at = datetime('now') WHERE id = ?`).run(id);
+    broadcastMatch(id, 'state', { _undone: true });
+    res.json(getLiveMatch(id));
+  } else if (action === 'switch_ack') {
+    db.prepare('UPDATE live_matches SET switch_acked = 1 WHERE id = ?').run(id);
+    broadcastMatch(id, 'state');
+    res.json(getLiveMatch(id));
+  } else {
+    return res.status(400).json({ error: `Unknown action: ${action}` });
+  }
+});
+
+app.post('/api/live/match/:id/save', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const m = getLiveMatch(id);
+  if (!m) return res.status(404).json({ error: 'Live match not found' });
+
+  // Insert into match_results (with is_live = 1), pick next match_index for that session
+  const nextIdx = db.prepare('SELECT COALESCE(MAX(match_index), -1) + 1 AS idx FROM match_results WHERE session_id = ?').get(m.session_id).idx;
+
+  let resultId;
+  db.transaction(() => {
+    const r = db.prepare(`
+      INSERT INTO match_results (session_id, match_index, team_a_ids, team_b_ids, team_a_score, team_b_score, is_live)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
+    `).run(
+      m.session_id, nextIdx,
+      JSON.stringify(m.team_a_ids), JSON.stringify(m.team_b_ids),
+      m.score_a, m.score_b
+    );
+    resultId = r.lastInsertRowid;
+    db.prepare('UPDATE pickle_sessions SET results_recorded = 1 WHERE id = ?').run(m.session_id);
+    db.prepare('UPDATE live_matches SET is_complete = 1, match_result_id = ? WHERE id = ?').run(resultId, id);
+  })();
+
+  const involved = [...new Set([...m.team_a_ids, ...m.team_b_ids])];
+  checkAchievementsAfterMatch(involved);
+
+  const updated = getLiveMatch(id);
+  logLiveEvent(id, 'save', null, 'admin', updated);
+  broadcastMatch(id, 'saved', { match_result_id: resultId });
+
+  res.json({ ok: true, match_result_id: resultId });
+});
+
+app.post('/api/live/match/:id/discard', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const m = getLiveMatch(id);
+  if (!m) return res.status(404).json({ error: 'Live match not found' });
+  db.prepare('UPDATE live_matches SET is_complete = 1 WHERE id = ?').run(id);
+  const updated = getLiveMatch(id);
+  logLiveEvent(id, 'discard', null, 'admin', updated);
+  broadcastMatch(id, 'discarded');
+  res.json({ ok: true });
+});
+
+app.get('/api/live/match/:id/stream', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const m = getLiveMatch(id);
+  if (!m) return res.status(404).json({ error: 'Live match not found' });
+
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  res.flushHeaders();
+  res.write(`event: state\ndata: ${JSON.stringify(m)}\n\n`);
+
+  if (!matchSseClients.has(id)) matchSseClients.set(id, new Set());
+  matchSseClients.get(id).add(res);
+
+  const ping = setInterval(() => {
+    try { res.write(`event: ping\ndata: ${Date.now()}\n\n`); } catch {}
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(ping);
+    matchSseClients.get(id)?.delete(res);
+  });
+});
+
+// --- Flic webhook (called by the Flic app on the phone/iPad) ---
+//
+// Two ways the webhook is used:
+// 1. During a live match: a press routes through to the bound team
+//    and applies the configured gesture (click → point, hold → undo).
+// 2. During pre-match sync: a press binds the pressing device to the
+//    admin's pending sync slot (A or B).
+//
+app.post('/api/live/webhook/:uid', (req, res) => {
+  const uid = req.params.uid;
+  const token = req.query.token || req.body?.token;
+  const gesture = (req.query.gesture || req.body?.gesture || 'click').toString();
+
+  const device = db.prepare('SELECT * FROM live_devices WHERE device_uid = ?').get(uid);
+  if (!device || device.token !== token) {
+    return res.status(401).json({ error: 'Unknown device or bad token' });
+  }
+
+  // 1) Is any admin currently in sync-listen mode? If so, bind.
+  for (const [adminTok, syncState] of syncListening.entries()) {
+    if (syncState.slot === 'A' || syncState.slot === 'B') {
+      const key = syncState.slot === 'A' ? 'a_device' : 'b_device';
+      syncState[key] = device.id;
+      const next = { slot: null, a_device: syncState.a_device || null, b_device: syncState.b_device || null };
+      syncListening.set(adminTok, next);
+      ssePush(syncSseClients, adminTok, 'synced', {
+        slot: syncState.slot, device: { id: device.id, name: device.name }
+      });
+      ssePush(syncSseClients, adminTok, 'sync_state', next);
+      return res.json({ ok: true, action: 'synced', slot: syncState.slot });
+    }
+  }
+
+  // 2) Find an active match where this device is bound, and apply the gesture.
+  const match = db.prepare(`
+    SELECT * FROM live_matches
+    WHERE is_complete = 0 AND (team_a_device = ? OR team_b_device = ?)
+    ORDER BY id DESC LIMIT 1
+  `).get(device.id, device.id);
+
+  if (!match) return res.json({ ok: true, action: 'ignored', reason: 'no-active-match' });
+
+  const team = match.team_a_device === device.id ? 'A' : 'B';
+
+  if (gesture === 'click') {
+    const m = hydrateMatch(match);
+    const next = applyPoint(m, team);
+    persistMatchState(next);
+    logLiveEvent(match.id, 'point', team, `device:${uid}`, next);
+    broadcastMatch(match.id, 'state', {
+      _switch_triggered: !!next._switch_triggered,
+      _scored_team: team
+    });
+    return res.json({ ok: true, action: 'point', team });
+  }
+
+  if (gesture === 'hold' || gesture === 'undo') {
+    const events = db.prepare('SELECT * FROM live_events WHERE match_id = ? ORDER BY id DESC LIMIT 2').all(match.id);
+    if (events.length < 2) return res.json({ ok: true, action: 'undo-noop' });
+    const prevState = JSON.parse(events[1].state_after);
+    persistMatchState(prevState);
+    db.prepare('DELETE FROM live_events WHERE id = ?').run(events[0].id);
+    db.prepare(`UPDATE live_matches SET last_event_at = datetime('now') WHERE id = ?`).run(match.id);
+    broadcastMatch(match.id, 'state', { _undone: true });
+    return res.json({ ok: true, action: 'undo' });
+  }
+
+  return res.json({ ok: true, action: 'ignored', reason: 'unknown-gesture' });
 });
 
 // --- Routes: Stats / Leaderboard ---
