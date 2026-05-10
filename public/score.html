@@ -65,9 +65,10 @@
       flex: 1;
       display: none;
       flex-direction: column;
-      padding: 1.25rem;
+      padding: 1.25rem 1.25rem 0;
       overflow-y: auto;
-      padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
     }
     .panel.active { display: flex; }
     .panel h2 {
@@ -159,7 +160,20 @@
     }
 
     /* Buttons */
-    .actions { margin-top: auto; padding-top: 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+    .actions {
+      margin-top: auto;       /* push to bottom when content is short */
+      position: sticky;       /* and keep it visible when content is long */
+      bottom: 0;
+      background: var(--black);
+      margin-left: -1.25rem;
+      margin-right: -1.25rem;
+      padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom, 0.5rem));
+      border-top: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      box-shadow: 0 -8px 12px rgba(0, 0, 0, 0.35);
+    }
     .btn {
       padding: 0.85rem;
       font-family: 'Bebas Neue', sans-serif;

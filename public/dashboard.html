@@ -637,6 +637,11 @@
       display: flex;
       gap: 0.6rem;
       margin-top: 1rem;
+      position: sticky;
+      bottom: -1.75rem;          /* counter the modal's padding */
+      background: var(--cream);
+      padding: 0.5rem 0;
+      box-shadow: 0 -8px 12px var(--cream);
     }
     .wizard-actions button {
       flex: 1;
@@ -788,6 +793,9 @@
       padding: 1.75rem;
       max-width: 340px;
       width: 100%;
+      max-height: calc(100dvh - 2rem);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
     .modal h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; letter-spacing: 1px; margin-bottom: 0.5rem; color: var(--red); }
     .modal p { font-size: 0.85rem; font-weight: 300; margin-bottom: 1.25rem; }
