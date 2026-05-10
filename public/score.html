@@ -823,9 +823,16 @@
       const coin = document.getElementById('coin');
       const flipBtn = document.getElementById('flip-btn');
       const result = Math.random() < 0.5 ? 'A' : 'B';
-      // 4-6 full rotations, ending on A (0deg) or B (180deg)
-      const turns = 4 + Math.floor(Math.random() * 3);
-      const finalRot = coinRotation + (turns * 360) + (result === 'A' ? 0 : 180);
+
+      // Heads (A) face is forward when rotation mod 360 = 0; tails (B) when mod 360 = 180.
+      // Spin at least 4 full turns, then add whatever extra rotation is needed to *land*
+      // on the target face — measured in absolute terms, not relative to the previous flip.
+      const targetMod = result === 'A' ? 0 : 180;
+      const minTurns = 4 + Math.floor(Math.random() * 3);  // 4-6 full spins
+      const minRot = coinRotation + minTurns * 360;
+      const minMod = ((minRot % 360) + 360) % 360;
+      const correction = ((targetMod - minMod) + 360) % 360;
+      const finalRot = minRot + correction;
 
       coin.style.setProperty('--start-rot', `${coinRotation}deg`);
       coin.style.setProperty('--end-rot', `${finalRot}deg`);
