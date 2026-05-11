@@ -184,6 +184,7 @@ ensureColumn('match_results', 'is_live', `is_live INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('pickle_sessions', 'venue', `venue TEXT`);
 ensureColumn('pickle_sessions', 'results_recorded', `results_recorded INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('roster_entries', 'is_reserve', `is_reserve INTEGER NOT NULL DEFAULT 0`);
+ensureColumn('pickle_sessions', 'is_test', `is_test INTEGER NOT NULL DEFAULT 0`);
 
 // --- Helpers ---
 const PICKLE_FACTS = [
@@ -335,16 +336,20 @@ function award(userId, code) {
 }
 
 function getPlayerStats(userId) {
+  // Test-session matches (is_test=1) are excluded from all stats — leaderboard,
+  // win/loss totals, match history, and (transitively) achievement checks.
   const matchesAsA = db.prepare(`
     SELECT mr.*, ps.session_datetime, ps.title FROM match_results mr
     JOIN pickle_sessions ps ON ps.id = mr.session_id
-    WHERE mr.team_a_ids LIKE ? OR mr.team_a_ids LIKE ? OR mr.team_a_ids LIKE ? OR mr.team_a_ids = ?
+    WHERE ps.is_test = 0
+      AND (mr.team_a_ids LIKE ? OR mr.team_a_ids LIKE ? OR mr.team_a_ids LIKE ? OR mr.team_a_ids = ?)
   `).all(`[${userId},%`, `%,${userId},%`, `%,${userId}]`, `[${userId}]`);
 
   const matchesAsB = db.prepare(`
     SELECT mr.*, ps.session_datetime, ps.title FROM match_results mr
     JOIN pickle_sessions ps ON ps.id = mr.session_id
-    WHERE mr.team_b_ids LIKE ? OR mr.team_b_ids LIKE ? OR mr.team_b_ids LIKE ? OR mr.team_b_ids = ?
+    WHERE ps.is_test = 0
+      AND (mr.team_b_ids LIKE ? OR mr.team_b_ids LIKE ? OR mr.team_b_ids LIKE ? OR mr.team_b_ids = ?)
   `).all(`[${userId},%`, `%,${userId},%`, `%,${userId}]`, `[${userId}]`);
 
   let wins = 0, losses = 0;
@@ -363,7 +368,11 @@ function getPlayerStats(userId) {
   const responses = db.prepare(`SELECT available FROM responses WHERE user_id = ?`).all(userId);
   const yesCount = responses.filter(r => r.available === 1).length;
 
-  const rosterCount = db.prepare(`SELECT COUNT(*) AS c FROM roster_entries WHERE user_id = ? AND is_reserve = 0`).get(userId).c;
+  const rosterCount = db.prepare(`
+    SELECT COUNT(*) AS c FROM roster_entries re
+    JOIN pickle_sessions ps ON ps.id = re.session_id
+    WHERE re.user_id = ? AND re.is_reserve = 0 AND ps.is_test = 0
+  `).get(userId).c;
 
   return {
     matches_played: wins + losses,
@@ -659,6 +668,7 @@ app.get('/api/sessions', requireUser, (req, res) => {
     WHERE ps.status NOT IN ('cancelled', 'archived')
       AND (ps.status != 'draft' OR ${isAdmin ? '1=1' : '1=0'})
       AND (${userTimeFilter})
+      AND (${isAdmin ? '1=1' : 'ps.is_test = 0'})
     ORDER BY ps.session_datetime ASC
   `).all();
 
@@ -858,6 +868,56 @@ app.post('/api/sessions/:id/cancel', requireAdmin, async (req, res) => {
     }
   }
   res.json({ ok: true });
+});
+
+// Create a fully-isolated test session for admin to try the live-score
+// system without affecting real users, stats, league or achievements.
+//   - 4 dedicated test users (idempotent: created once, reused after)
+//   - status=closed, roster_published=1, is_test=1
+//   - session_datetime = now + 5 min (so Live Score button is visible)
+//   - any previous non-archived test session is auto-archived for tidiness
+app.post('/api/admin/test-session', requireAdmin, (req, res) => {
+  const ensureUser = (username, display_name, avatar) => {
+    const existing = db.prepare('SELECT id FROM users WHERE lower(username) = lower(?)').get(username);
+    if (existing) return existing.id;
+    const r = db.prepare('INSERT INTO users (username, display_name, avatar) VALUES (?, ?, ?)').run(username, display_name, avatar);
+    return r.lastInsertRowid;
+  };
+  const testIds = [
+    ensureUser('TestA', '🧪 Test A', '🅰️'),
+    ensureUser('TestB', '🧪 Test B', '🅱️'),
+    ensureUser('TestC', '🧪 Test C', '©️'),
+    ensureUser('TestD', '🧪 Test D', '🇩')
+  ];
+
+  // Auto-archive any previous active test session so we don't accumulate them
+  db.prepare(`UPDATE pickle_sessions SET status='archived' WHERE is_test = 1 AND status != 'archived'`).run();
+
+  // Build the new session
+  const sessTime = new Date(Date.now() + 5 * 60 * 1000);
+  const deadline = new Date(Date.now() - 60 * 60 * 1000); // already past
+  const sessTimeStr = toLocalIsoString(sessTime);
+  const deadlineStr = toLocalIsoString(deadline);
+
+  const r = db.prepare(`
+    INSERT INTO pickle_sessions
+      (title, session_datetime, response_deadline, status, roster_published, is_test, max_players, courts)
+    VALUES (?, ?, ?, 'closed', 1, 1, 4, 1)
+  `).run('🧪 Live Score Test', sessTimeStr, deadlineStr);
+  const sessionId = r.lastInsertRowid;
+
+  // Fake the responses + roster so the live-score init code is happy
+  for (const uid of testIds) {
+    db.prepare('INSERT INTO responses (session_id, user_id, available, keenness) VALUES (?, ?, 1, 1)').run(sessionId, uid);
+    db.prepare('INSERT INTO roster_entries (session_id, user_id, is_reserve, notified_in) VALUES (?, ?, 0, 1)').run(sessionId, uid);
+  }
+
+  res.json({
+    ok: true,
+    session_id: sessionId,
+    live_score_url: `/score.html?session=${sessionId}`,
+    test_user_ids: testIds
+  });
 });
 
 app.delete('/api/sessions/:id', requireAdmin, (req, res) => {

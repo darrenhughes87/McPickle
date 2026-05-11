@@ -687,6 +687,15 @@
       const cancelled = allSessions.filter(s => s.status === 'cancelled');
 
       let html = `
+        <div style="margin-bottom:1rem;padding:0.75rem;background:rgba(212,180,74,0.08);border:1.5px dashed var(--pickle-yellow);border-radius:6px;font-size:0.82rem;color:var(--pickle-yellow);display:flex;align-items:center;gap:0.6rem;">
+          <span style="font-size:1.3rem;">🧪</span>
+          <div style="flex:1;line-height:1.35;">
+            <strong style="font-family:'Bebas Neue',sans-serif;letter-spacing:1px;font-weight:normal;">Test the live scoring</strong><br>
+            <span style="color:#aaa;font-size:0.78rem;">Creates a private session with 4 test players. Invisible to the squad. Results don't affect stats, league or achievements.</span>
+          </div>
+          <button class="btn btn-yellow btn-sm" onclick="createTestSession()" style="white-space:nowrap;">Create &amp; play</button>
+        </div>
+
         <div class="section-head">Create New Session</div>
         <div class="card">
           <div class="form-row-2">
@@ -863,6 +872,7 @@
             ${s.venue ? `<div class="sac-venue">📍 ${s.venue}</div>` : ''}
           </div>
           <div>
+            ${s.is_test ? '<span class="status-pill" style="background:rgba(212,180,74,0.2);color:var(--pickle-yellow);">🧪 test</span> ' : ''}
             <span class="status-pill ${pillClass}">${s.status}</span>
             ${isPublished ? '<span class="status-pill pill-published">📣 published</span>' : ''}
           </div>
@@ -955,6 +965,14 @@
         await api(`/api/sessions/${id}/unarchive`, { method: 'POST' });
         toast('Session unarchived');
         loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function createTestSession() {
+      try {
+        const r = await api('/api/admin/test-session', { method: 'POST' });
+        toast('Test session ready — opening Live Score…');
+        setTimeout(() => { window.location.href = r.live_score_url; }, 600);
       } catch (e) { toast(e.message, true); }
     }
 
