@@ -1828,7 +1828,9 @@ app.get('/api/stats/leaderboard', requireUser, (req, res) => {
       sessions_attended: stats.sessions_attended,
       yes_rate: stats.yes_rate
     };
-  });
+  // Only include players who've actually played a match — keeps the league
+  // focused and avoids new squad members cluttering the bottom with 0/0/0.
+  }).filter(p => p.matches_played > 0);
   // Sort by wins desc, then win_rate desc
   board.sort((a, b) => b.wins - a.wins || b.win_rate - a.win_rate || b.matches_played - a.matches_played);
   res.json(board);
