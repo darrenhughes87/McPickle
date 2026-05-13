@@ -846,6 +846,48 @@ app.get('/api/sessions/archived', requireAdmin, (req, res) => {
   res.json(sessions);
 });
 
+// Re-open a session that was closed (deadline passed) so new squad members
+// — or anyone who didn't get round to responding — can submit a response.
+// Requires a new future response_deadline. Only allowed when the roster hasn't
+// been published yet; if it has, you'd need to cancel + create a new session.
+app.post('/api/sessions/:id/reopen', requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const session = db.prepare('SELECT * FROM pickle_sessions WHERE id = ?').get(id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  if (session.status !== 'closed') {
+    return res.status(409).json({ error: 'Only closed sessions can be reopened' });
+  }
+  if (session.roster_published === 1) {
+    return res.status(409).json({ error: 'Cannot reopen — roster has been published. Cancel and create a new session instead.' });
+  }
+
+  const { response_deadline } = req.body;
+  if (!response_deadline) return res.status(400).json({ error: 'response_deadline required' });
+  if (new Date(response_deadline) <= new Date()) {
+    return res.status(409).json({ error: 'New response deadline must be in the future' });
+  }
+
+  db.prepare(`
+    UPDATE pickle_sessions
+    SET status = 'open',
+        response_deadline = ?,
+        notified_deadline_24h = 0,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(response_deadline, id);
+
+  // Push notification to everyone (including the new squad members)
+  const label = session.title ? `${session.title} — ` : '';
+  await sendPushToAll({
+    title: 'McPICKLES 🥒 — Session reopened',
+    body: `${label}Last chance to say if you're in. New deadline: ${formatSessionTime(response_deadline)}`,
+    url: '/dashboard.html',
+    tag: 'session-reopened'
+  });
+
+  res.json({ ok: true });
+});
+
 app.post('/api/sessions/:id/cancel', requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   const session = db.prepare('SELECT * FROM pickle_sessions WHERE id = ?').get(id);

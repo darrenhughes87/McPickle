@@ -540,6 +540,31 @@
     </div>
   </main>
 
+  <!-- Reopen session modal -->
+  <div class="modal-overlay" id="reopen-modal">
+    <div class="modal">
+      <h3>↩️ Reopen Session</h3>
+      <p style="font-size:0.85rem;color:#aaa;margin-bottom:1rem;">
+        Pick a new response deadline. The session goes back to "open" and a push
+        notification goes out to the whole squad — including any new members
+        who weren't around when it first opened.
+      </p>
+      <input type="hidden" id="reopen-session-id">
+      <div class="form-row">
+        <label>New deadline</label>
+        <div class="date-time-row">
+          <input type="date" id="reopen-date">
+          <input type="time" id="reopen-time" value="23:59">
+        </div>
+        <div class="hint">Pick something between an hour from now and the actual session time.</div>
+      </div>
+      <div class="modal-btns">
+        <button class="btn btn-ghost" onclick="closeReopenModal()">Cancel</button>
+        <button class="btn btn-green" onclick="confirmReopen()">↩️ Reopen &amp; notify squad</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Edit session modal -->
   <div class="modal-overlay" id="edit-modal">
     <div class="modal">
@@ -849,6 +874,7 @@
         } else {
           actionsHtml = `
             <button class="btn btn-yellow btn-sm" onclick="toggleResponses(${s.id})">👥 Pick Squad (${s.available_count} avail)</button>
+            <button class="btn btn-green btn-sm" onclick="openReopenModal(${s.id})">↩️ Reopen</button>
             <button class="btn btn-blue btn-sm" onclick="cloneSession(${s.id})">📋 Clone</button>
             <button class="btn btn-ghost btn-sm" onclick="archiveSession(${s.id})">🗄 Archive</button>
             <button class="btn btn-red btn-sm" onclick="cancelSession(${s.id})">❌ Cancel</button>`;
@@ -947,6 +973,37 @@
       try {
         await api(`/api/sessions/${id}`, { method: 'DELETE' });
         toast('Draft deleted');
+        loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    // ---- Reopen modal ----
+    function openReopenModal(sid) {
+      document.getElementById('reopen-session-id').value = sid;
+      // Default deadline to 1 hour from now, rounded to the nearest 5 minutes
+      const t = new Date(Date.now() + 60 * 60 * 1000);
+      const round = 5 - (t.getMinutes() % 5);
+      t.setMinutes(t.getMinutes() + (round === 5 ? 0 : round));
+      t.setSeconds(0);
+      const pad = n => String(n).padStart(2, '0');
+      document.getElementById('reopen-date').value = `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
+      document.getElementById('reopen-time').value = `${pad(t.getHours())}:${pad(t.getMinutes())}`;
+      document.getElementById('reopen-modal').classList.add('show');
+    }
+    function closeReopenModal() { document.getElementById('reopen-modal').classList.remove('show'); }
+
+    async function confirmReopen() {
+      const sid = parseInt(document.getElementById('reopen-session-id').value);
+      const deadline = getCombinedDatetime('reopen-date', 'reopen-time');
+      if (!deadline) { toast('Pick a date and time', true); return; }
+      if (new Date(deadline) <= new Date()) { toast('Deadline must be in the future', true); return; }
+      try {
+        await api(`/api/sessions/${sid}/reopen`, {
+          method: 'POST',
+          body: JSON.stringify({ response_deadline: deadline })
+        });
+        toast('Session reopened — push sent 🥒');
+        closeReopenModal();
         loadSessions();
       } catch (e) { toast(e.message, true); }
     }
