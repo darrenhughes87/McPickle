@@ -1740,10 +1740,11 @@ app.get('/api/live/match/:id/stream', requireAdmin, (req, res) => {
 // 2. During pre-match sync: a press binds the pressing device to the
 //    admin's pending sync slot (A or B).
 //
-app.post('/api/live/webhook/:uid', (req, res) => {
+const webhookHandler = (req, res) => {
   const uid = req.params.uid;
   const token = req.query.token || req.body?.token;
   const gesture = (req.query.gesture || req.body?.gesture || 'click').toString();
+  console.log(`[webhook] ${req.method} uid=${uid} gesture=${gesture}`);
 
   const device = db.prepare('SELECT * FROM live_devices WHERE device_uid = ?').get(uid);
   if (!device || device.token !== token) {
@@ -1800,7 +1801,11 @@ app.post('/api/live/webhook/:uid', (req, res) => {
   }
 
   return res.json({ ok: true, action: 'ignored', reason: 'unknown-gesture' });
-});
+};
+// Accept both POST (Android Flic / Shortcuts with explicit POST) and GET
+// (iOS Shortcuts that defaulted to GET). Same handler either way.
+app.post('/api/live/webhook/:uid', webhookHandler);
+app.get('/api/live/webhook/:uid', webhookHandler);
 
 // --- Routes: Stats / Leaderboard ---
 app.get('/api/stats/me', requireUser, (req, res) => {

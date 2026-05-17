@@ -7,7 +7,7 @@
   "scope": "/",
   "theme_color": "#2D5038",
   "background_color": "#2D5038",
-  "orientation": "portrait",
+  "orientation": "any",
   "categories": ["sports", "lifestyle", "social"],
   "icons": [
     {
