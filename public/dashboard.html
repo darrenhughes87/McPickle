@@ -1304,7 +1304,10 @@
           <div class="stat-card"><div class="num">${s.win_rate}%</div><div class="lbl">Win Rate</div></div>
           <div class="stat-card"><div class="num">${s.sessions_attended}</div><div class="lbl">Sessions</div></div>
           <div class="stat-card"><div class="num">${s.yes_count}</div><div class="lbl">Times Said Yes</div></div>
-          <div class="stat-card"><div class="num">${s.yes_rate}%</div><div class="lbl">Yes Rate</div></div>
+          <div class="stat-card">
+            <div class="num">${s.eligible_sessions > 0 ? s.yes_rate + '%' : '—'}</div>
+            <div class="lbl">Yes Rate${s.eligible_sessions > 0 ? ` · ${s.yes_count}/${s.eligible_sessions}` : ''}</div>
+          </div>
         </div>
 
         <div class="section-title" style="margin-top:1.5rem;">🏅 Achievements (${data.achievements.length}/${Object.keys(data.catalog).length})</div>

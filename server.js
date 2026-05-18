@@ -365,8 +365,40 @@ function getPlayerStats(userId) {
     allMatches.push({ ...m, was_team_a: false, won });
   }
 
-  const responses = db.prepare(`SELECT available FROM responses WHERE user_id = ?`).all(userId);
-  const yesCount = responses.filter(r => r.available === 1).length;
+  const allResponses = db.prepare(`SELECT available FROM responses WHERE user_id = ?`).all(userId);
+
+  // ── Yes-rate eligibility ───────────────────────────────────────────
+  // A session "counts" for a user if:
+  //   - status was real (open / closed / archived — not draft or cancelled)
+  //   - the user was onboarded BEFORE the response deadline (had a fair chance)
+  // No-response is equivalent to a "no" — only an explicit yes counts toward
+  // the numerator. Test sessions are excluded.
+  const user = db.prepare('SELECT onboarded_at, created_at FROM users WHERE id = ?').get(userId);
+  const cutoff = user?.onboarded_at || user?.created_at || null;
+
+  let eligibleSessions = 0;
+  let yesCount = 0;
+  let yesRate = 0;
+  if (cutoff) {
+    eligibleSessions = db.prepare(`
+      SELECT COUNT(*) AS c FROM pickle_sessions
+      WHERE is_test = 0
+        AND status IN ('open', 'closed', 'archived')
+        AND datetime(response_deadline) > datetime(?)
+    `).get(cutoff).c;
+
+    yesCount = db.prepare(`
+      SELECT COUNT(*) AS c FROM responses r
+      JOIN pickle_sessions ps ON ps.id = r.session_id
+      WHERE r.user_id = ?
+        AND r.available = 1
+        AND ps.is_test = 0
+        AND ps.status IN ('open', 'closed', 'archived')
+        AND datetime(ps.response_deadline) > datetime(?)
+    `).get(userId, cutoff).c;
+
+    yesRate = eligibleSessions > 0 ? Math.round((yesCount / eligibleSessions) * 100) : 0;
+  }
 
   const rosterCount = db.prepare(`
     SELECT COUNT(*) AS c FROM roster_entries re
@@ -380,9 +412,10 @@ function getPlayerStats(userId) {
     losses,
     win_rate: (wins + losses) > 0 ? Math.round((wins / (wins + losses)) * 100) : 0,
     sessions_attended: rosterCount,
-    response_count: responses.length,
-    yes_count: yesCount,
-    yes_rate: responses.length > 0 ? Math.round((yesCount / responses.length) * 100) : 0,
+    response_count: allResponses.length,      // still: total responses ever submitted
+    yes_count: yesCount,                      // now: yes responses to ELIGIBLE sessions
+    yes_rate: yesRate,                        // numerator / eligibleSessions
+    eligible_sessions: eligibleSessions,      // NEW: denominator transparency
     matches: allMatches.sort((a, b) => new Date(b.session_datetime) - new Date(a.session_datetime))
   };
 }
