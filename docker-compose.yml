@@ -10,6 +10,7 @@ services:
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_CONTACT_EMAIL=${VAPID_CONTACT_EMAIL}
+      - PAYMENT_LINK=${PAYMENT_LINK:-}
       - TZ=Europe/London
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3003/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]

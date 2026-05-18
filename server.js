@@ -529,8 +529,11 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 app.get('/api/auth/me', requireUser, (req, res) => {
-  if (req.adminSession) return res.json({ admin: true });
-  res.json({ user: req.user });
+  // Static payment link (Monzo etc) surfaced to confirmed-roster players.
+  // No state tracking on the server side — it's a fire-and-forget link.
+  const payment_link = process.env.PAYMENT_LINK?.trim() || null;
+  if (req.adminSession) return res.json({ admin: true, payment_link });
+  res.json({ user: req.user, payment_link });
 });
 
 // --- Routes: Pickle Fact (no auth - public fun) ---

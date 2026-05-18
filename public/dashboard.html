@@ -378,6 +378,24 @@
     }
     .roster-cost { font-size: 0.8rem; color: var(--pickle-light); }
     .roster-cost strong { color: var(--pickle-yellow); }
+    .pay-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin: 0.75rem 0 0;
+      padding: 0.6rem 1rem;
+      background: var(--pickle-yellow);
+      color: var(--black);
+      border: 2px solid var(--black);
+      border-radius: 4px;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.05rem;
+      letter-spacing: 1.5px;
+      text-decoration: none;
+      box-shadow: 2px 2px 0 var(--black);
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+    .pay-btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--black); }
     .roster-reserves {
       margin-top: 0.6rem;
       padding-top: 0.6rem;
@@ -977,6 +995,7 @@
     }
 
     let currentUser = null;
+    let paymentLink = null;   // Static Monzo-style link from /api/auth/me — null = no payment button
     let allSessions = [];
     let myStats = null;
 
@@ -1108,6 +1127,7 @@
             <strong>${pence(ri.cost_per_player_pence)}/person</strong>
             (+ <strong>${pence(ri.racket_hire_pence)}</strong> racket hire if needed)
           </div>
+          ${paymentLink ? `<a class="pay-btn" href="${paymentLink}" target="_blank" rel="noopener">💷 Pay your court share →</a>` : ''}
           ${ri.reserves?.length ? `<div class="roster-reserves">🔁 Reserves: ${ri.reserves.map(r => `${r.avatar || '🥒'} ${r.display_name}`).join(' · ')}</div>` : ''}
           <div class="roster-actions">
             <button class="dropout-btn" onclick="confirmDropout(${session.id})">Can't make it — drop out</button>
@@ -1835,6 +1855,7 @@
       if (!meData.user) { window.location.replace('/'); return; }
 
       currentUser = meData.user;
+      paymentLink = meData.payment_link || null;
       document.getElementById('header-name').textContent = currentUser.display_name;
       document.getElementById('header-sub').textContent = currentUser.is_priority ? '⭐ Priority player' : 'Squad member';
       document.getElementById('header-avatar').textContent = currentUser.avatar || '🥒';
