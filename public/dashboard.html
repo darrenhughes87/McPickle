@@ -1366,7 +1366,7 @@
             </div>`;
           });
           html += `</div>`;
-          html += `<div style="font-size:0.7rem;color:var(--pickle-light);text-align:center;margin-top:0.75rem;">Sorted by wins, then win rate</div>`;
+          html += `<div style="font-size:0.7rem;color:var(--pickle-light);text-align:center;margin-top:0.75rem;line-height:1.4;">Ranked by win rate with a small penalty for low play counts, so a single lucky game can't top the table.</div>`;
         }
         el.innerHTML = html;
       } catch (e) {

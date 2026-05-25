@@ -1857,6 +1857,12 @@ app.get('/api/stats/me', requireUser, (req, res) => {
 });
 
 app.get('/api/stats/leaderboard', requireUser, (req, res) => {
+  // K is the "burden" — pretend each player has K extra losses on top of their
+  // real record. As they play more, those phantom losses become a smaller share
+  // of the total, so the adjusted win rate gradually converges on the raw one.
+  // K=5 ≈ "two sessions of pickleball" before your rate stabilises.
+  const LEAGUE_K = 5;
+
   const users = db.prepare(`SELECT id, display_name, avatar, is_priority FROM users ORDER BY display_name`).all();
   const board = users.map(u => {
     const stats = getPlayerStats(u.id);
@@ -1866,14 +1872,20 @@ app.get('/api/stats/leaderboard', requireUser, (req, res) => {
       wins: stats.wins,
       losses: stats.losses,
       win_rate: stats.win_rate,
+      adjusted_win_rate: Math.round((stats.wins / (stats.matches_played + LEAGUE_K)) * 100),
       sessions_attended: stats.sessions_attended,
       yes_rate: stats.yes_rate
     };
   // Only include players who've actually played a match — keeps the league
   // focused and avoids new squad members cluttering the bottom with 0/0/0.
   }).filter(p => p.matches_played > 0);
-  // Sort by wins desc, then win_rate desc
-  board.sort((a, b) => b.wins - a.wins || b.win_rate - a.win_rate || b.matches_played - a.matches_played);
+  // Sort by adjusted win rate desc, then total wins desc (user request),
+  // then matches_played desc as a final near-impossible-to-trigger tiebreaker.
+  board.sort((a, b) =>
+    b.adjusted_win_rate - a.adjusted_win_rate ||
+    b.wins - a.wins ||
+    b.matches_played - a.matches_played
+  );
   res.json(board);
 });
 
