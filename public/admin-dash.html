@@ -354,6 +354,47 @@
     }
     .cost-info-box strong { color: var(--pickle-yellow); }
 
+    /* Nudge box — "press here to ping the silent squad" */
+    .nudge-box {
+      background: linear-gradient(135deg, #3a2c12 0%, #2d2310 100%);
+      border: 1px solid var(--pickle-yellow);
+      border-radius: 8px;
+      padding: 0.85rem 0.9rem;
+      margin: 0 0 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .nudge-head {
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 1px;
+      font-size: 1rem;
+      color: var(--pickle-yellow);
+    }
+    .nudge-sub {
+      font-size: 0.78rem;
+      color: #d8c79a;
+      line-height: 1.4;
+    }
+    .nudge-box .btn { align-self: flex-start; }
+
+    /* Flic diagnostics chip */
+    .flic-diag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.7rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      background: #222;
+      color: #bbb;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .flic-diag.is-click  { background: #1b3a25; color: #88e0a4; }
+    .flic-diag.is-hold   { background: #3a2918; color: #f0c065; }
+    .flic-diag.is-stale  { background: #2a1f1f; color: #888; }
+    .flic-diag.is-never  { background: #1a1a1a; color: #666; font-style: italic; }
+
     /* Match results panel */
     .results-panel {
       background: #1a1a1a;
@@ -1086,6 +1127,24 @@
         · Racket hire: <strong>${pence(cost_info.racket_hire_pence)}</strong>
       </div>`;
 
+      // Nudge non-responders — only show if there are non-responders AND
+      // session is open (deadline not yet hit, accepting new responses).
+      // Show count, spots-needed, and warn if the user lacks push.
+      if (!isPublished && session.status === 'open' && non_responders.length > 0) {
+        const confirmed = responses.filter(r => r.available === 1).length;
+        const spotsNeeded = Math.max(0, session.max_players - confirmed);
+        const spotsText = spotsNeeded === 0
+          ? 'Roster is full but a head-count would still help.'
+          : spotsNeeded === 1
+            ? 'Just <strong>1 more</strong> player needed.'
+            : `Looking for <strong>${spotsNeeded} more</strong> players.`;
+        html += `<div class="nudge-box">
+          <div class="nudge-head">📣 ${non_responders.length} ${non_responders.length === 1 ? 'person hasn\'t' : 'people haven\'t'} responded yet</div>
+          <div class="nudge-sub">${spotsText} A nudge sends a push notification asking them to reply.</div>
+          <button class="btn btn-yellow btn-sm" onclick="nudgeNonResponders(${sid})">📣 Nudge non-responders</button>
+        </div>`;
+      }
+
       // Responses table
       html += `<table class="resp-table">
         <thead><tr><th>Player</th><th>Available</th><th>Keenness</th><th>Submitted</th></tr></thead><tbody>`;
@@ -1223,6 +1282,26 @@
         toast('Roster published! Squad notified 🏆');
         delete rosterState[sid];
         loadSessions();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    async function nudgeNonResponders(sid) {
+      const data = responsePanelData[sid];
+      const count = data?.non_responders?.length ?? 0;
+      if (!count) { toast('Nobody to nudge', true); return; }
+      const names = data.non_responders.map(u => u.display_name).join(', ');
+      if (!confirm(`Send a push notification to ${count} non-responder${count === 1 ? '' : 's'}?\n\n${names}`)) return;
+      try {
+        const r = await api(`/api/sessions/${sid}/remind-non-responders`, { method: 'POST' });
+        if (r.sent === 0 && r.silent_total > 0) {
+          toast(r.message || 'Nobody has push notifications on — try a WhatsApp message', true);
+        } else if (r.sent === 0) {
+          toast('Everyone has already responded', true);
+        } else {
+          const missing = r.silent_total - r.sent;
+          const tail = missing > 0 ? ` (${missing} have no push — message them another way)` : '';
+          toast(`📣 Nudged ${r.sent} ${r.sent === 1 ? 'person' : 'people'}${tail}`);
+        }
       } catch (e) { toast(e.message, true); }
     }
 
@@ -1578,8 +1657,28 @@
     }
 
     // ---- DEVICES (Flic buttons) ----
-    async function loadDevices() {
+    let devicePollTimer = null;
+    function startDevicePolling() {
+      stopDevicePolling();
+      // Refresh every 3 seconds while the user is on the Flics tab — fast
+      // enough that pressing a button feels live, light enough not to hammer the
+      // server. Tab switcher stops the timer.
+      devicePollTimer = setInterval(() => {
+        if (document.getElementById('panel-devices')?.classList.contains('active')) {
+          loadDevices({ silent: true });
+        } else {
+          stopDevicePolling();
+        }
+      }, 3000);
+    }
+    function stopDevicePolling() {
+      if (devicePollTimer) { clearInterval(devicePollTimer); devicePollTimer = null; }
+    }
+
+    async function loadDevices(opts = {}) {
       const el = document.getElementById('devices-content');
+      // Kick off polling once the tab is opened (idempotent)
+      if (!opts.silent) startDevicePolling();
       try {
         const devices = await api('/api/live/devices');
         let html = `<div class="section-head">🔘 Flic buttons</div>
@@ -1603,20 +1702,27 @@
           html += `<div class="empty"><p>No Flic buttons registered yet.</p></div>`;
         } else {
           devices.forEach(d => {
-            html += `<div class="user-row" id="dev-row-${d.id}">
+            const diag = formatFlicDiag(d);
+            html += `<div class="user-row" id="dev-row-${d.id}" style="flex-wrap:wrap;gap:0.4rem;">
               <div style="font-size:1.4rem;width:32px;text-align:center;">🔘</div>
               <div style="flex:1;min-width:0;">
                 <div class="user-name">${d.name}</div>
                 <div class="user-handle">${d.device_uid}</div>
+                <div style="margin-top:0.35rem;">${diag}</div>
               </div>
               <button class="btn btn-ghost btn-sm" onclick="showDeviceWebhooks(${d.id})">URLs</button>
               <button class="btn btn-red btn-sm" onclick="deleteDevice(${d.id}, '${d.name.replace(/'/g, "\\'")}')">Remove</button>
             </div>`;
           });
+          // Footer hint: once user presses a hold, they can verify it arrived as hold.
+          html += `<div style="font-size:0.72rem;color:#888;margin-top:0.75rem;line-height:1.45;">
+            The chip above each Flic shows what gesture it last sent. If you hold the button and it shows <strong>click</strong>, the iOS Shortcut for that gesture is wired to the wrong URL — copy the hold URL again and re-paste it into the "Hold" action.
+          </div>`;
         }
         el.innerHTML = html;
       } catch (e) {
-        el.innerHTML = `<div class="empty"><p>Couldn't load Flics: ${e.message}</p></div>`;
+        // Silent polls shouldn't blow away the visible UI on transient errors.
+        if (!opts.silent) el.innerHTML = `<div class="empty"><p>Couldn't load Flics: ${e.message}</p></div>`;
       }
     }
 
@@ -1647,14 +1753,35 @@
 
     function showWebhookModal(d) {
       const message = `🔘 Flic registered!\n\n` +
-        `Paste these URLs into the Flic app's button settings.\n\n` +
+        `Paste these URLs into the Flic app's button settings.\n` +
+        `The two URLs end in DIFFERENT paths (.../click vs .../hold) — if both Shortcuts call the same URL, hold won't undo.\n\n` +
         `─── SINGLE CLICK (= point) ───\n${d.webhooks.click}\n\n` +
         `─── HOLD (= undo) ───\n${d.webhooks.hold}\n\n` +
         `⚠️ These URLs are shown ONCE. Save them now.`;
-      // Try clipboard
-      const blob = `# ${d.name}\nSingle click: ${d.webhooks.click}\nHold: ${d.webhooks.hold}\n`;
+      const blob = `# ${d.name}\nSingle click: ${d.webhooks.click}\nHold:         ${d.webhooks.hold}\n`;
       try { navigator.clipboard.writeText(blob); } catch {}
       alert(message + '\n\n(Both URLs also copied to clipboard.)');
+    }
+
+    // Format the "last seen" diagnostic chip for a device row in the Flics tab.
+    // If the device has never been pressed → grey "never pressed" pill.
+    // If the last press was within ~5 min → green "click" / yellow "hold" pill.
+    // Older than that → grey stale pill with how long ago.
+    function formatFlicDiag(d) {
+      if (!d.last_seen_at) {
+        return `<span class="flic-diag is-never">never pressed</span>`;
+      }
+      const seenMs = new Date(d.last_seen_at.replace(' ', 'T') + 'Z').getTime();
+      const ageSec = Math.max(0, Math.round((Date.now() - seenMs) / 1000));
+      let ageLabel;
+      if (ageSec < 60)          ageLabel = `${ageSec}s ago`;
+      else if (ageSec < 3600)   ageLabel = `${Math.round(ageSec / 60)}m ago`;
+      else if (ageSec < 86400)  ageLabel = `${Math.round(ageSec / 3600)}h ago`;
+      else                      ageLabel = `${Math.round(ageSec / 86400)}d ago`;
+      const stale = ageSec > 300;
+      const klass = stale ? 'is-stale' : (d.last_gesture === 'hold' ? 'is-hold' : 'is-click');
+      const action = d.last_action ? ` → ${d.last_action}` : '';
+      return `<span class="flic-diag ${klass}">last: ${d.last_gesture || '?'}${action} · ${ageLabel}</span>`;
     }
 
     // ---- Init ----

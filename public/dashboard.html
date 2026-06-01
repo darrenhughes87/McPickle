@@ -194,7 +194,15 @@
       border-radius: 8px;
       margin-bottom: 1.25rem;
       overflow: hidden;
+      transition: box-shadow 0.3s ease, transform 0.3s ease;
     }
+    /* Pulse the deep-linked card so the user sees which one the nudge meant */
+    @keyframes flashFocus {
+      0%   { box-shadow: 4px 4px 0 var(--black); }
+      40%  { box-shadow: 0 0 0 4px var(--pickle-yellow), 4px 4px 0 var(--black); transform: scale(1.01); }
+      100% { box-shadow: 4px 4px 0 var(--black); transform: scale(1); }
+    }
+    .session-card.flash-focus { animation: flashFocus 2.2s ease-out 1; }
     .card-header {
       padding: 1rem 1.25rem 0.75rem;
       border-bottom: 2px solid var(--black);
@@ -1844,10 +1852,27 @@
         allSessions = await api('/api/sessions');
         initSessionStates(allSessions);
         document.getElementById('sessions-content').innerHTML = renderSessions(allSessions);
+        focusHashedCard();          // honour #session-{id} from push deep-link
       } catch (e) {
         document.getElementById('sessions-content').innerHTML = `<div class="empty-state"><span class="big-emoji">⚠️</span><p>Couldn't load: ${e.message}</p></div>`;
       }
     }
+
+    // When opened via a push notification with #session-{id}, scroll the card
+    // into view and pulse a highlight so it's obvious which one wants attention.
+    function focusHashedCard() {
+      const m = (location.hash || '').match(/^#session-(\d+)$/);
+      if (!m) return;
+      const card = document.getElementById(`card-${m[1]}`);
+      if (!card) return;
+      // Defer one tick so layout is settled
+      requestAnimationFrame(() => {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.add('flash-focus');
+        setTimeout(() => card.classList.remove('flash-focus'), 2400);
+      });
+    }
+    window.addEventListener('hashchange', focusHashedCard);
 
     // ---- Init ----
     async function init() {

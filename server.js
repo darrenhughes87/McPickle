@@ -185,6 +185,16 @@ ensureColumn('pickle_sessions', 'venue', `venue TEXT`);
 ensureColumn('pickle_sessions', 'results_recorded', `results_recorded INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('roster_entries', 'is_reserve', `is_reserve INTEGER NOT NULL DEFAULT 0`);
 ensureColumn('pickle_sessions', 'is_test', `is_test INTEGER NOT NULL DEFAULT 0`);
+// Flic diagnostics — see what each device last did and when. Helps when the
+// user reports "hold isn't undoing" — we can verify whether the gesture
+// arriving from the Flic app actually says hold, or whether the iOS Shortcut
+// is silently calling the click URL for both gestures.
+ensureColumn('live_devices', 'last_gesture', `last_gesture TEXT`);
+ensureColumn('live_devices', 'last_seen_at', `last_seen_at TEXT`);
+ensureColumn('live_devices', 'last_action', `last_action TEXT`);
+// How many remind-non-responder nudges have been sent per session, used to
+// debounce in the UI (can't double-nudge within 10 min from the same admin).
+ensureColumn('pickle_sessions', 'last_nudge_at', `last_nudge_at TEXT`);
 
 // --- Helpers ---
 const PICKLE_FACTS = [
@@ -1007,6 +1017,99 @@ app.delete('/api/sessions/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// Nudge non-responders — pings everyone who has push enabled but hasn't said
+// yes/no yet. Use when a session is short on confirmed players and you need
+// the silent squad to make up their minds.
+//   - Only valid for sessions that are open (not draft, closed, cancelled).
+//   - Excludes admin (no user row), excludes anyone who already responded.
+//   - Includes spots-needed math in the push body so people know the urgency.
+//   - Debounced server-side: max one nudge per 10 minutes per session.
+app.post('/api/sessions/:id/remind-non-responders', requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const session = db.prepare('SELECT * FROM pickle_sessions WHERE id = ?').get(id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  if (session.status !== 'open') {
+    return res.status(409).json({ error: 'Session must be open to nudge non-responders' });
+  }
+
+  // Cool-down: don't spam if admin double-taps. 10 min minimum between nudges.
+  if (session.last_nudge_at) {
+    const last = new Date(session.last_nudge_at + 'Z'); // stored UTC by datetime('now')
+    const sinceMs = Date.now() - last.getTime();
+    const COOLDOWN_MS = 10 * 60 * 1000;
+    if (sinceMs < COOLDOWN_MS) {
+      const minsLeft = Math.ceil((COOLDOWN_MS - sinceMs) / 60000);
+      return res.status(429).json({
+        error: `Just nudged everyone — wait ${minsLeft} more minute${minsLeft === 1 ? '' : 's'} before nudging again.`
+      });
+    }
+  }
+
+  // Who hasn't responded? Filter to those with a push subscription so we don't
+  // count "sent to 5" when really 2 will never see it.
+  const targets = db.prepare(`
+    SELECT u.id, u.display_name FROM users u
+    WHERE u.push_sub IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM responses r WHERE r.session_id = ? AND r.user_id = u.id)
+  `).all(id);
+
+  // Also count people without push so the admin sees the full picture.
+  const silentTotal = db.prepare(`
+    SELECT COUNT(*) AS c FROM users u
+    WHERE NOT EXISTS (SELECT 1 FROM responses r WHERE r.session_id = ? AND r.user_id = u.id)
+  `).get(id).c;
+
+  if (targets.length === 0) {
+    // Could be: everyone responded, or nobody has push. Either way, no work.
+    return res.json({
+      ok: true,
+      sent: 0,
+      silent_total: silentTotal,
+      message: silentTotal === 0
+        ? 'Everyone has already responded.'
+        : `${silentTotal} haven't responded but none have push notifications on — message them directly.`
+    });
+  }
+
+  // Spots-needed math: how many "yes" we have vs max_players, capped at 0.
+  const confirmedCount = db.prepare(`
+    SELECT COUNT(*) AS c FROM responses WHERE session_id = ? AND available = 1
+  `).get(id).c;
+  const spotsNeeded = Math.max(0, session.max_players - confirmedCount);
+
+  let bodyLead;
+  if (spotsNeeded === 0) {
+    bodyLead = `Just need a yes/no for the head-count.`;
+  } else if (spotsNeeded === 1) {
+    bodyLead = `Just one more player needed!`;
+  } else {
+    bodyLead = `Looking for ${spotsNeeded} more players.`;
+  }
+
+  const label = session.title ? `${session.title} — ` : '';
+  const when = formatSessionTime(session.session_datetime);
+  let sent = 0;
+  for (const u of targets) {
+    const ok = await sendPushToUser(u.id, {
+      title: 'McPICKLES 🥒 — Are you in?',
+      body: `${label}${when}. ${bodyLead} Tap to reply.`,
+      url: `/dashboard.html#session-${id}`,    // deep-link straight to the right card
+      tag: `nudge-${id}` // collapses repeat nudges into one OS notification
+    });
+    if (ok) sent++;
+  }
+
+  db.prepare(`UPDATE pickle_sessions SET last_nudge_at = datetime('now') WHERE id = ?`).run(id);
+
+  res.json({
+    ok: true,
+    sent,
+    silent_total: silentTotal,
+    spots_needed: spotsNeeded,
+    targets: targets.map(t => t.display_name)
+  });
+});
+
 // --- Routes: Responses ---
 app.post('/api/sessions/:id/respond', requireUser, (req, res) => {
   if (req.adminSession) return res.status(403).json({ error: 'Admin cannot respond to sessions' });
@@ -1506,7 +1609,10 @@ function broadcastMatch(matchId, eventType = 'state', extra = {}) {
 function newDeviceUid() { return 'flic_' + randomBytes(3).toString('hex'); }
 
 app.get('/api/live/devices', requireAdmin, (req, res) => {
-  res.json(db.prepare('SELECT id, device_uid, name, created_at FROM live_devices ORDER BY created_at DESC').all());
+  res.json(db.prepare(`
+    SELECT id, device_uid, name, last_gesture, last_seen_at, last_action, created_at
+    FROM live_devices ORDER BY created_at DESC
+  `).all());
 });
 
 app.post('/api/live/devices', requireAdmin, (req, res) => {
@@ -1516,12 +1622,20 @@ app.post('/api/live/devices', requireAdmin, (req, res) => {
   const r = db.prepare('INSERT INTO live_devices (device_uid, name, token) VALUES (?, ?, ?)').run(device_uid, name, token);
 
   const host = `${req.protocol}://${req.get('host')}`;
+  // Path-based URLs (preferred — structurally distinct so the iOS Shortcut
+  // can't be accidentally wired the same way for both gestures).
+  // We keep returning the legacy query-string URLs for back-compat with old
+  // Shortcuts that admins haven't re-pasted.
   res.json({
     id: r.lastInsertRowid,
     device_uid,
     name,
     token,
     webhooks: {
+      click: `${host}/api/live/webhook/${device_uid}/click?token=${token}`,
+      hold:  `${host}/api/live/webhook/${device_uid}/hold?token=${token}`
+    },
+    legacy_webhooks: {
       click: `${host}/api/live/webhook/${device_uid}?gesture=click&token=${token}`,
       hold:  `${host}/api/live/webhook/${device_uid}?gesture=hold&token=${token}`
     }
@@ -1779,13 +1893,29 @@ app.get('/api/live/match/:id/stream', requireAdmin, (req, res) => {
 const webhookHandler = (req, res) => {
   const uid = req.params.uid;
   const token = req.query.token || req.body?.token;
-  const gesture = (req.query.gesture || req.body?.gesture || 'click').toString();
-  console.log(`[webhook] ${req.method} uid=${uid} gesture=${gesture}`);
+  // Gesture resolution priority:
+  //   1. URL path segment   (/webhook/:uid/click  or  /webhook/:uid/hold) — preferred, structurally distinct
+  //   2. Query string       (?gesture=click)                              — legacy iOS Shortcut format
+  //   3. JSON body          ({"gesture":"click"})                         — programmatic callers
+  //   4. Default to 'click'
+  const pathGesture = (req.params.gesture || '').toLowerCase();
+  const gesture = (pathGesture || req.query.gesture || req.body?.gesture || 'click').toString().toLowerCase();
+  console.log(`[webhook] ${req.method} uid=${uid} gesture=${gesture} (path="${pathGesture}" query="${req.query.gesture || ''}")`);
 
   const device = db.prepare('SELECT * FROM live_devices WHERE device_uid = ?').get(uid);
   if (!device || device.token !== token) {
     return res.status(401).json({ error: 'Unknown device or bad token' });
   }
+
+  // Diagnostic stamp — recorded BEFORE we decide what to do, so even
+  // ignored presses are visible to the admin in the device diagnostics panel.
+  // last_action is filled in below when we actually do something.
+  db.prepare(`UPDATE live_devices SET last_gesture = ?, last_seen_at = datetime('now') WHERE id = ?`)
+    .run(gesture, device.id);
+
+  const stampAction = (action) => {
+    db.prepare(`UPDATE live_devices SET last_action = ? WHERE id = ?`).run(action, device.id);
+  };
 
   // 1) Is any admin currently in sync-listen mode? If so, bind.
   for (const [adminTok, syncState] of syncListening.entries()) {
@@ -1798,6 +1928,7 @@ const webhookHandler = (req, res) => {
         slot: syncState.slot, device: { id: device.id, name: device.name }
       });
       ssePush(syncSseClients, adminTok, 'sync_state', next);
+      stampAction(`synced→${syncState.slot}`);
       return res.json({ ok: true, action: 'synced', slot: syncState.slot });
     }
   }
@@ -1809,7 +1940,10 @@ const webhookHandler = (req, res) => {
     ORDER BY id DESC LIMIT 1
   `).get(device.id, device.id);
 
-  if (!match) return res.json({ ok: true, action: 'ignored', reason: 'no-active-match' });
+  if (!match) {
+    stampAction('ignored:no-active-match');
+    return res.json({ ok: true, action: 'ignored', reason: 'no-active-match' });
+  }
 
   const team = match.team_a_device === device.id ? 'A' : 'B';
 
@@ -1822,26 +1956,49 @@ const webhookHandler = (req, res) => {
       _switch_triggered: !!next._switch_triggered,
       _scored_team: team
     });
+    stampAction(`point→${team}`);
     return res.json({ ok: true, action: 'point', team });
   }
 
-  if (gesture === 'hold' || gesture === 'undo') {
+  if (gesture === 'hold' || gesture === 'undo' || gesture === 'longpress' || gesture === 'long_press') {
     const events = db.prepare('SELECT * FROM live_events WHERE match_id = ? ORDER BY id DESC LIMIT 2').all(match.id);
-    if (events.length < 2) return res.json({ ok: true, action: 'undo-noop' });
+    if (events.length < 2) {
+      stampAction('undo-noop');
+      return res.json({ ok: true, action: 'undo-noop' });
+    }
     const prevState = JSON.parse(events[1].state_after);
     persistMatchState(prevState);
     db.prepare('DELETE FROM live_events WHERE id = ?').run(events[0].id);
     db.prepare(`UPDATE live_matches SET last_event_at = datetime('now') WHERE id = ?`).run(match.id);
     broadcastMatch(match.id, 'state', { _undone: true });
+    stampAction('undo');
     return res.json({ ok: true, action: 'undo' });
   }
 
+  stampAction(`ignored:unknown-gesture=${gesture}`);
   return res.json({ ok: true, action: 'ignored', reason: 'unknown-gesture' });
 };
-// Accept both POST (Android Flic / Shortcuts with explicit POST) and GET
+// Path-based routes (preferred — structurally distinct, harder to misconfigure)
+app.post('/api/live/webhook/:uid/:gesture', webhookHandler);
+app.get('/api/live/webhook/:uid/:gesture', webhookHandler);
+// Legacy query-string routes (for Shortcuts that haven't been re-pasted yet).
+// Accept both POST (Android Flic / explicit POST Shortcuts) and GET
 // (iOS Shortcuts that defaulted to GET). Same handler either way.
 app.post('/api/live/webhook/:uid', webhookHandler);
 app.get('/api/live/webhook/:uid', webhookHandler);
+
+// Diagnostic endpoint — see what each device last did. Surfaced in the admin
+// Flics tab so the user can verify, after testing, whether holds are actually
+// arriving as holds or as clicks (the iOS Shortcut misconfig footgun).
+app.get('/api/live/devices/:id/diagnostics', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const device = db.prepare(`
+    SELECT id, device_uid, name, last_gesture, last_seen_at, last_action, created_at
+    FROM live_devices WHERE id = ?
+  `).get(id);
+  if (!device) return res.status(404).json({ error: 'Device not found' });
+  res.json(device);
+});
 
 // --- Routes: Stats / Leaderboard ---
 app.get('/api/stats/me', requireUser, (req, res) => {
