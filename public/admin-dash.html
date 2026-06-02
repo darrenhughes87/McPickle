@@ -1376,10 +1376,14 @@
         html += `<div style="font-size:0.78rem;color:#666;text-align:center;padding:0.75rem;">No matches yet — click "Add Match" to start</div>`;
       } else {
         matches.forEach((m, idx) => {
-          const teamSize = Math.max(m.team_a_ids.length, m.team_b_ids.length, 2);
+          // Respect the match's own size: singles → 1 dropdown per team,
+          // doubles → 2. (Was hard-floored to 2, which made "Add Singles"
+          // still show a phantom second slot.) Min 1 so an empty row is sane.
+          const teamSize = Math.max(m.team_a_ids.length, m.team_b_ids.length, 1);
+          const modeLabel = teamSize === 1 ? 'Singles · 1v1' : 'Doubles · 2v2';
           const liveBadge = m.is_live ? ' <span style="background:rgba(212,180,74,0.2);color:var(--pickle-yellow);padding:0.1rem 0.4rem;border-radius:3px;font-size:0.6rem;letter-spacing:0.5px;">🎯 live</span>' : '';
           html += `<div class="match-row">
-            <div class="team-label" style="font-size:0.65rem;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:0.4rem;">Match ${idx + 1}${liveBadge}</div>
+            <div class="team-label" style="font-size:0.65rem;color:#888;letter-spacing:1px;text-transform:uppercase;margin-bottom:0.4rem;">Match ${idx + 1} · ${modeLabel}${liveBadge}</div>
             <div class="match-team-row">
               <div class="match-side">
                 <div class="team-label">Team A</div>
