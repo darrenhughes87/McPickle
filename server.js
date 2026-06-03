@@ -117,6 +117,13 @@ db.exec(`
     UNIQUE(user_id, code)
   );
 
+  CREATE TABLE IF NOT EXISTS admin_push_subs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    endpoint     TEXT NOT NULL UNIQUE,
+    subscription TEXT NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS live_devices (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     device_uid  TEXT NOT NULL UNIQUE,
@@ -302,6 +309,23 @@ async function sendPushToUser(userId, payload) {
 async function sendPushToAll(payload) {
   const users = db.prepare('SELECT id FROM users WHERE push_sub IS NOT NULL').all();
   for (const u of users) await sendPushToUser(u.id, payload);
+}
+
+// Admin push — the admin role has no users row, so its subscriptions live in
+// admin_push_subs (one per device). Used for the "someone said yes" heads-up.
+async function sendPushToAdmins(payload) {
+  const subs = db.prepare('SELECT id, subscription FROM admin_push_subs').all();
+  for (const s of subs) {
+    try {
+      await webpush.sendNotification(JSON.parse(s.subscription), JSON.stringify(payload));
+    } catch (err) {
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        db.prepare('DELETE FROM admin_push_subs WHERE id = ?').run(s.id);
+      } else {
+        console.error(`Admin push failed (sub ${s.id}):`, err.message);
+      }
+    }
+  }
 }
 
 function formatSessionTime(dt) {
@@ -653,20 +677,55 @@ app.get('/api/vapid-public-key', (req, res) => {
 });
 
 app.post('/api/push/subscribe', requireUser, (req, res) => {
-  if (req.adminSession) return res.status(403).json({ error: 'Admin cannot subscribe to push' });
   const { subscription } = req.body;
   if (!subscription) return res.status(400).json({ error: 'Subscription required' });
+
+  if (req.adminSession) {
+    // Admin has no users row — store in admin_push_subs, keyed by endpoint so
+    // the same device re-subscribing just refreshes its row rather than dupes.
+    if (!subscription.endpoint) return res.status(400).json({ error: 'Subscription missing endpoint' });
+    db.prepare(`
+      INSERT INTO admin_push_subs (endpoint, subscription) VALUES (?, ?)
+      ON CONFLICT(endpoint) DO UPDATE SET subscription = excluded.subscription
+    `).run(subscription.endpoint, JSON.stringify(subscription));
+    return res.json({ ok: true });
+  }
+
   db.prepare('UPDATE users SET push_sub = ? WHERE id = ?').run(JSON.stringify(subscription), req.user.id);
   res.json({ ok: true });
 });
 
 app.post('/api/push/unsubscribe', requireUser, (req, res) => {
-  if (!req.adminSession) db.prepare('UPDATE users SET push_sub = NULL WHERE id = ?').run(req.user.id);
+  if (req.adminSession) {
+    // Remove just this device's subscription if its endpoint is provided,
+    // otherwise clear all admin subscriptions (full opt-out).
+    const endpoint = req.body?.subscription?.endpoint || req.body?.endpoint;
+    if (endpoint) db.prepare('DELETE FROM admin_push_subs WHERE endpoint = ?').run(endpoint);
+    else db.prepare('DELETE FROM admin_push_subs').run();
+    return res.json({ ok: true });
+  }
+  db.prepare('UPDATE users SET push_sub = NULL WHERE id = ?').run(req.user.id);
   res.json({ ok: true });
 });
 
+// Is the admin currently set up to receive push? (count of registered devices)
+app.get('/api/admin/push/status', requireAdmin, (req, res) => {
+  const count = db.prepare('SELECT COUNT(*) AS c FROM admin_push_subs').get().c;
+  res.json({ devices: count });
+});
+
 app.post('/api/push/test', requireUser, async (req, res) => {
-  if (req.adminSession) return res.status(403).json({ error: 'Admin has no push subscription' });
+  if (req.adminSession) {
+    const subs = db.prepare('SELECT id FROM admin_push_subs').all();
+    if (!subs.length) return res.json({ ok: true, sent: false, reason: 'no-subscription' });
+    await sendPushToAdmins({
+      title: 'McPICKLES 🥒 — Test',
+      body: 'Admin notifications are working! You\'ll get a ping each time someone says yes.',
+      url: '/admin-dash.html',
+      tag: 'admin-test'
+    });
+    return res.json({ ok: true, sent: true });
+  }
   const user = db.prepare('SELECT push_sub FROM users WHERE id = ?').get(req.user.id);
   if (!user?.push_sub) {
     return res.json({ ok: true, sent: false, reason: 'no-subscription' });
@@ -1132,6 +1191,13 @@ app.post('/api/sessions/:id/respond', requireUser, (req, res) => {
       return res.status(400).json({ error: 'keenness must be 1-4 when available' });
     }
   }
+
+  // Was this player already a "yes"? Used to decide whether to ping the admin —
+  // we only notify on the TRANSITION to yes, so changing keenness or re-saving
+  // an existing yes doesn't spam (the dashboard auto-saves on every tweak).
+  const prior = db.prepare('SELECT available FROM responses WHERE session_id = ? AND user_id = ?').get(sessionId, req.user.id);
+  const becameYes = available === 1 && (!prior || prior.available !== 1);
+
   db.prepare(`
     INSERT INTO responses (session_id, user_id, available, keenness, submitted_at, updated_at)
     VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -1140,6 +1206,19 @@ app.post('/api/sessions/:id/respond', requireUser, (req, res) => {
       keenness = excluded.keenness,
       updated_at = datetime('now')
   `).run(sessionId, req.user.id, available, k);
+
+  // Heads-up to the admin: someone just said yes. Fire-and-forget so it never
+  // blocks the player's response. Skipped for test sessions.
+  if (becameYes && !session.is_test) {
+    const yesCount = db.prepare(`SELECT COUNT(*) AS c FROM responses WHERE session_id = ? AND available = 1`).get(sessionId).c;
+    const label = session.title ? `${session.title} — ` : '';
+    sendPushToAdmins({
+      title: 'McPICKLES ✅ — Someone\'s in!',
+      body: `${req.user.display_name} said yes to ${label}${formatSessionTime(session.session_datetime)}. ${yesCount} confirmed so far.`,
+      url: `/admin-dash.html`,
+      tag: `yes-${sessionId}` // collapses a flurry of yeses into one OS notification
+    }).catch(() => {});
+  }
 
   // Check for early-bird achievement
   const respondedCount = db.prepare(`SELECT COUNT(*) AS c FROM responses WHERE session_id = ?`).get(sessionId).c;

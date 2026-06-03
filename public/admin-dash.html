@@ -63,8 +63,19 @@
       font-size: 0.65rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
       padding: 0.15rem 0.4rem; border-radius: 3px; border: 1.5px solid var(--black);
     }
+    .bell-btn {
+      background: transparent;
+      border: 1.5px solid var(--pickle-mid);
+      border-radius: 4px;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0.35rem 0.5rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .bell-btn.on { border-color: var(--pickle-yellow); background: rgba(212,180,74,0.15); }
+    .bell-btn.blocked { opacity: 0.5; }
     .logout-btn {
-      margin-left: auto;
       padding: 0.4rem 0.8rem;
       font-family: 'Oswald', sans-serif;
       font-size: 0.8rem;
@@ -553,7 +564,8 @@
     <img src="/icon.svg" alt="McPICKLES">
     <div class="header-title"><span class="mc-prefix">Mc</span>PICKLES</div>
     <span class="header-badge">Admin</span>
-    <button class="logout-btn" onclick="doLogout()">Log out</button>
+    <button class="bell-btn" id="bell-btn" onclick="toggleAdminPush()" title="Notify me when someone says yes" style="margin-left:auto;">🔕</button>
+    <button class="logout-btn" onclick="doLogout()" style="margin-left:0.5rem;">Log out</button>
   </header>
 
   <div class="tabs">
@@ -1788,6 +1800,124 @@
       return `<span class="flic-diag ${klass}">last: ${d.last_gesture || '?'}${action} · ${ageLabel}</span>`;
     }
 
+    // ---- Admin push notifications ("ping me when someone says yes") ----
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = atob(base64);
+      return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+    }
+    function applicationServerKeyMatches(sub, keyBytes) {
+      try {
+        const existing = sub.options?.applicationServerKey;
+        if (!existing) return false;
+        const a = new Uint8Array(existing);
+        if (a.length !== keyBytes.length) return false;
+        for (let i = 0; i < a.length; i++) if (a[i] !== keyBytes[i]) return false;
+        return true;
+      } catch { return false; }
+    }
+
+    function setBellState(state) {
+      // state: 'on' | 'off' | 'blocked'
+      const bell = document.getElementById('bell-btn');
+      if (!bell) return;
+      bell.classList.toggle('on', state === 'on');
+      bell.classList.toggle('blocked', state === 'blocked');
+      bell.textContent = state === 'on' ? '🔔' : '🔕';
+      bell.title = state === 'on'
+        ? 'Notifications ON — you\'ll be pinged when someone says yes (tap to turn off)'
+        : state === 'blocked'
+          ? 'Notifications blocked in your browser settings'
+          : 'Tap to be notified when someone says yes';
+    }
+
+    async function adminSubscribePush({ forceFresh = false } = {}) {
+      const reg = await navigator.serviceWorker.ready;
+      const { key } = await (await fetch('/api/vapid-public-key')).json();
+      const keyBytes = urlBase64ToUint8Array(key);
+      let sub = await reg.pushManager.getSubscription();
+      if (sub && (forceFresh || !applicationServerKeyMatches(sub, keyBytes))) {
+        try { await sub.unsubscribe(); } catch {}
+        sub = null;
+      }
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes });
+      }
+      const res = await fetch('/api/push/subscribe', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscription: sub })
+      });
+      return res.ok;
+    }
+
+    async function toggleAdminPush() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        toast('This browser doesn\'t support notifications', true); return;
+      }
+      const bell = document.getElementById('bell-btn');
+      // Currently on? → turn off
+      if (bell.classList.contains('on')) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          const endpoint = sub?.endpoint;
+          if (sub) { try { await sub.unsubscribe(); } catch {} }
+          await fetch('/api/push/unsubscribe', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(endpoint ? { endpoint } : {})
+          });
+          setBellState('off');
+          toast('Notifications off');
+        } catch (e) { toast('Couldn\'t turn off: ' + e.message, true); }
+        return;
+      }
+      // Turn on
+      if (Notification.permission === 'denied') {
+        setBellState('blocked');
+        toast('Notifications are blocked — enable them in your browser settings for this site', true);
+        return;
+      }
+      const perm = Notification.permission === 'granted'
+        ? 'granted'
+        : await Notification.requestPermission();
+      if (perm !== 'granted') { setBellState('off'); return; }
+      try {
+        const ok = await adminSubscribePush();
+        if (ok) {
+          setBellState('on');
+          toast('🔔 You\'ll get a ping each time someone says yes');
+          fetch('/api/push/test', { method: 'POST' }).catch(() => {});
+        } else {
+          toast('Subscribe failed — try again', true);
+        }
+      } catch (e) { toast('Couldn\'t enable: ' + e.message, true); }
+    }
+
+    async function initAdminPush() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        const b = document.getElementById('bell-btn'); if (b) b.style.display = 'none';
+        return;
+      }
+      try { await navigator.serviceWorker.register('/sw.js'); } catch (e) { console.warn('SW register failed', e); }
+      if (Notification.permission === 'denied') { setBellState('blocked'); return; }
+      // If permission already granted AND the server still has a sub for us,
+      // reflect "on" and silently refresh the subscription (handles VAPID/endpoint drift).
+      if (Notification.permission === 'granted') {
+        try {
+          const status = await api('/api/admin/push/status');
+          const reg = await navigator.serviceWorker.ready;
+          const existing = await reg.pushManager.getSubscription();
+          if (status.devices > 0 || existing) {
+            await adminSubscribePush();   // idempotent refresh
+            setBellState('on');
+            return;
+          }
+        } catch {}
+      }
+      setBellState('off');
+    }
+
     // ---- Init ----
     async function init() {
       const meRes = await fetch('/api/auth/me').catch(() => null);
@@ -1796,6 +1926,7 @@
       if (!me.admin) { window.location.replace('/admin.html'); return; }
       loadSessions();
       loadSquad();
+      initAdminPush();
     }
 
     init().catch(console.error);
